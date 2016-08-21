@@ -731,7 +731,7 @@ sub SmarterCoffee_ProcessEventForExtraStrength($$) {
         if ($event =~ /^strength:\s*([^\s]+)\s*$/ and not $event =~ /.*extra.*/) {
             fhem("sleep 0.1 fix-strength ; set ".$hash->{NAME}." strength extra");
 
-        } elsif ($event =~ /^state:\s*brewing/ && ReadingsVal($hash->{NAME}, "grinder", "") eq "enabled") {
+        } elsif ($event =~ /^state:\s*brewing/ and ReadingsVal($hash->{NAME}, "grinder", "") eq "enabled") {
             my @params = (
                 ReadingsVal($hash->{NAME}, "cups", "-"),
                 ReadingsVal($hash->{NAME}, "strength", "-"),
@@ -807,6 +807,7 @@ sub SmarterCoffee_TranslateParamsForExtraStrength($$$) {
 
         while ($desiredCups > 0 and not defined($grind{cups})) {
             my $targetWeight = $desiredCups * $weights[2] * $extraPercent;
+
             for (my $i = 0; $i < int(@weights); $i++) {
                 if (($weights[$i] // -1) > 0 and $targetWeight > 0) {
                     my $cups = int($targetWeight / $weights[$i]) + ($extraPercent > 1 ? 1 : 0);
@@ -911,15 +912,15 @@ sub SmarterCoffee_Discover($) {
     my $wait = IO::Select->new( $socket );
 
     while ($wait->can_read( 10 )) {
-        my $deviceAddresss = recv($socket, my $message, 128, 0);
-        my $inetSocketAddress = SmarterCoffee_InetSocketAddressString($deviceAddresss);
+        my $deviceAddress = recv($socket, my $message, 128, 0);
+        my $inetSocketAddress = SmarterCoffee_InetSocketAddressString($deviceAddress);
 
         $message = unpack('H*', $message);
 
         Log3 $hash->{NAME}, 4, "Discovery :: Received message $message from $inetSocketAddress";
 
         if ($message =~ /^65.*7e.*/ and SmarterCoffee_ParseMessage($hash, $message)) {
-            my ($port, $inetAddress) = sockaddr_in($deviceAddresss);
+            my ($port, $inetAddress) = sockaddr_in($deviceAddress);
 
             if (my ($hostname) = gethostbyaddr($inetAddress, AF_INET)) {
                 $hash->{DeviceName} = $hostname.":$port";
