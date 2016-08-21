@@ -208,7 +208,7 @@ sub SmarterCoffee_ParseMessage {
             SmarterCoffee_UpdateReading($hash, "carafe_required", ($1 eq "01" ? "no" : "yes"));
         }
 
-        # Parse descale detection status message.
+        # Parse single cup mode status message.
         if ($message =~ /^50([0-9a-f]{2})7e.*/) {
             SmarterCoffee_UpdateReading($hash, "cups_single_mode", ($1 eq "00" ? "no" : "yes"));
         }
