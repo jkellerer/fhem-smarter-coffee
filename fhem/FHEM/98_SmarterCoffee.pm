@@ -1075,13 +1075,14 @@ sub SmarterCoffee_GetDevStateIcon {
 1;
 
 =pod
-
+=item device
+=item summary Controls a Wi-Fi Smarter Coffee machine via network connection
 =begin html
 
 <a name="SmarterCoffee"></a>
 <h3>SmarterCoffee</h3>
 <ul>
-    Integrates the equally named WiFi coffee machine (<code>http://smarter.am/</code>) with FHEM.
+    Integrates the equally called Wi-Fi coffee machine (<code>http://smarter.am/</code>) with FHEM.
     <br><br>
     <i>Prerequisite</i>:<br>
     Make sure the machine can be controlled by the smarter mobile app when both are connected to the same network as fhem.<br>
