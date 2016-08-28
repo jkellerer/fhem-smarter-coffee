@@ -826,11 +826,13 @@ sub SmarterCoffee_IsExtraStrengthModeAvailable($;$) {
     my ($hash, $slient) = @_;
 
     my $extraPercent = AttrVal($hash->{NAME}, "strength-extra-percent", 1.2);
-    if ($extraPercent > 0 and $extraPercent != 1 and $extraPercent < 2.5) {
+    my $preBrew = int(AttrVal($hash->{NAME}, "strength-extra-pre-brew-cups", 1)) * int(AttrVal($hash->{NAME}, "strength-extra-pre-brew-delay-seconds", 0));
+
+    if ($extraPercent > 0 and ($extraPercent != 1 or $preBrew > 0) and $extraPercent < 2.5) {
         return 1;
     } else {
         Log3 $hash->{NAME}, (($slient // 1) ? 5 : 3),
-            "Extra-Strength :: Strength 'extra' is disabled as [strength-extra-percent = $extraPercent] is out of range (0 < x < 2.5) or does not match (x<>1)";
+            "Extra-Strength :: Strength 'extra' is disabled as [strength-extra-percent = $extraPercent] is out of range (0 < x < 2.5)";
         return 0;
     }
 }
@@ -1358,8 +1360,7 @@ sub SmarterCoffee_GetDevStateIcon {
         <code>attr &lt;name&gt; strength-extra-percent 1.2</code><br>
         Specifies the percentage of coffee to use relative to strength "<code>strong</code>" when brewing coffee with <code>extra</code> strength.
         A value of "<code>1.2</code>" brews coffee that is 120% the strength of "<code>strong</code>" respectively "<code>0.8</code>" brews coffee that
-        is 80% the strength. Setting <code>strength-extra-percent</code> to <code>1</code> or <code>0</code> disables support
-        for extra strength.
+        is 80% the strength. Setting <code>strength-extra-percent</code> to <code>0</code> disables support for extra strength.
         <br><br>
         Note: Brewing coffee with <code>extra</code> strength uses strengths and cup counts natively supported by the machine and the configured percentage
         is likely not matched exactly.
