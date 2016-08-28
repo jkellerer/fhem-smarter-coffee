@@ -825,7 +825,7 @@ sub SmarterCoffee_ExtraStrengthHandleBrewing($) {
 sub SmarterCoffee_IsExtraStrengthModeAvailable($;$) {
     my ($hash, $slient) = @_;
 
-    my $extraPercent = AttrVal($hash->{NAME}, "strength-extra-percent", 1.2);
+    my $extraPercent = AttrVal($hash->{NAME}, "strength-extra-percent", $SmarterCoffee_StrengthExtraDefaultPercent);
     my $preBrew = int(AttrVal($hash->{NAME}, "strength-extra-pre-brew-cups", 1)) * int(AttrVal($hash->{NAME}, "strength-extra-pre-brew-delay-seconds", 0));
 
     if ($extraPercent > 0 and ($extraPercent != 1 or $preBrew > 0) and $extraPercent < 2.5) {
