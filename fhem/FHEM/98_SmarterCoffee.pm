@@ -783,10 +783,14 @@ sub SmarterCoffee_ProcessEventForExtraStrength($$) {
         if ($event =~ /^strength:\s*([^\s]+)\s*$/ and not $event =~ /.*extra.*/) {
             fhem("sleep 0.1 fix-strength ; set ".$hash->{NAME}." strength extra");
 
-        } elsif ($event =~ /^state:\s*done/ and (my $delay = int($hash->{".extra_strength.pre_brew_phase_delay"} // 0)) > 0) {
-            InternalTimer(gettimeofday() + $delay, "SmarterCoffee_ExtraStrengthHandleBrewing", $hash, 0);
-        } elsif ($event =~ /^state:\s*brewing/) {
-            SmarterCoffee_ExtraStrengthHandleBrewing($hash);
+        } elsif ($event =~ /^state:\s*done/) {
+            if ((my $delay = int($hash->{".extra_strength.pre_brew_phase_delay"} // 0)) > 0) {
+                InternalTimer(gettimeofday() + $delay, "SmarterCoffee_ExtraStrengthHandleBrewing", $hash, 0);
+            } else {
+                delete $hash->{".extra_strength.phase-2"} if $hash->{".extra_strength.phase-2"};
+            }
+        } elsif ($event =~ /^state:\s*brewing/ and not $hash->{".extra_strength.phase-2"}) {
+            $hash->{".extra_strength.phase-2"} = SmarterCoffee_ExtraStrengthHandleBrewing($hash);
         }
     } else {
         if ($event =~ /^strength:\s*extra\s*$/) {
@@ -819,7 +823,10 @@ sub SmarterCoffee_ExtraStrengthHandleBrewing($) {
         Log3 $hash->{NAME}, 4, "Extra-Strength :: Phase $phase [set ".join(" ", @params)."]";
 
         SmarterCoffee_Set($hash, @params);
+        return 1;
     }
+
+    return 0;
 }
 
 sub SmarterCoffee_IsExtraStrengthModeAvailable($;$) {
