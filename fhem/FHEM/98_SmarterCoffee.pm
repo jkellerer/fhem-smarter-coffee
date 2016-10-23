@@ -1129,7 +1129,8 @@ sub SmarterCoffee_GetDevStateIcon {
     my $waterLevel = ReadingsVal($name, "water_level", "0");
 
     $icon =~ s/(name="ready" opacity)="1"/$1="0"/g if $state ne "ready";
-    $icon =~ s/(name="(brewing|coffee-level)" opacity)="1"/$1="0"/g if $state ne "brewing";
+    $icon =~ s/(name="brewing" opacity)="1"/$1="0"/g if $state ne "brewing";
+    $icon =~ s/(name="coffee-level" opacity)="1"/$1="0"/g if ($state ne "brewing" and $state ne "done");
     $icon =~ s/(name="(carafe|coffee-level)" opacity)="1"/$1="0"/g if (ReadingsVal($name, "carafe", "present") ne "present" or $noWater);
     $icon =~ s/(name="heating" opacity)="1"/$1="0"/g if ReadingsVal($name, "hotplate", "off") ne "on";
 
