@@ -1336,13 +1336,17 @@ sub SmarterCoffee_GetDevStateIcon {
 <b>Attributes</b><br>
 <ul>
     <li>
-        <code>attr &lt;name&gt; devStateIcon { SmarterCoffee_GetDevStateIcon($name) }</code><br>
-        Renders a custom dev state icon that displays the machine states (ready, brewing, done) and shows information on carafe, hotplate and water level.
+        <code>attr &lt;name&gt; devStateIcon { SmarterCoffee_GetDevStateIcon($name) }</code>
+        <br><br>
+        The function <code>SmarterCoffee_GetDevStateIcon($name[, "...colors..."])</code> renders a custom dev state icon that displays
+        the machine states (ready, brewing, done) and shows information on carafe, hotplate and water level.
         <br><br>
         The icon is monochrome using a default color that may change to highlight states: ready, brewing, done.
-        Built-in colors can be adjusted with the second parameter of <code>SmarterCoffee_GetDevStateIcon</code>, e.g. using
-        "<code>attr &lt;name&gt; devStateIcon { SmarterCoffee_GetDevStateIcon($name, '#7b7b7b green chocolate #336699' }</code>"
-        sets colors for default, ready, brewing and done. Colors are specified as HTML color names or expressions delimited by whitespace and using a fixed order.
+        Built-in colors can be adjusted with the second parameter of <code>SmarterCoffee_GetDevStateIcon</code>.<br>
+        E.g. using "<code>attr &lt;name&gt; devStateIcon { SmarterCoffee_GetDevStateIcon($name, '#7b7b7b green chocolate #336699' }</code>"
+        sets colors for default, ready, brewing and done.
+        <br><br>
+        Colors are specified as HTML color values delimited by whitespace using a fixed order of "default ready brewing done".
         Use '-' or '0' to substitute a color with the built-in or the default color within the color sequence. E.g. a color sequence of 'blue - 0 0' uses
         blue for all states except "ready" which uses the built-in color green.</li><br>
     <li>
@@ -1386,14 +1390,21 @@ sub SmarterCoffee_GetDevStateIcon {
         </li><br>
     <li>
         <code>attr &lt;name&gt; strength-coffee-weights 3.5 3.9 4.3</code><br>
-        Is the amount of coffee used in grams specified per strength <code>[weak, medium, strong]</code> using whitespace as delimiter.
+        Is the amount of coffee that the grinder produces per cup depending on the selected strength. This setting does not control the amount it only
+        tells the module what the grinder will produce. Changing the default values is therefore only required if the actual coffee machine produces
+        different results.<br>
+        The amounts are specified in grams per strength <code>[weak, medium, strong]</code> using whitespace as delimiter.
+        <br><br>
         This metric is used to calculate actual <code>strength</code> and <code>cups</code> to use when grinding coffee with <code>extra</code> strength.
-        The algorithm tries to find the closest matching cup counts and strength value towards the target amount of coffee that calculates with
-        <code>(strength-extra-percent * strong-weight * desired-cups)</code>. Water level is also taken into account as cup count is truncated by the
-        coffee machine when grinding, depending on the amount of available water. Decisions may vary depending on cups and available water, keep water
-        level at maximum to get best results.<br>
-        Note: It is technically not possible to control the amount of coffee directly. The grams specified here are used select between strengths
-        <code>weak, medium, strong</code>. What matters is the proportions between the values not their absolute values.</li><br>
+        E.g. for 120% extra strength, 3 cups require <tt style="white-space: nowrap">(3 * 4.3 * 1.2) = 15.48</tt> gramms of coffee.
+        In this example the closest match is grinding 4 cups with medium strength which produces <code>(4 * 3.9) = 15.6</code> gramms and the actual
+        brewing is then performed with 3 cups as originally requested.
+        <br><br>
+        The algorithm tries to find the closest matching cup counts and strength value towards the target amount of coffee required for
+        <code>extra</code> strength. It is technically not possible to control the amount of coffee directly, therefore the grams specified for the
+        different strengths are used select between native supported strengths <code>weak, medium, strong</code> that match the desired target the closest.
+        Water level is also taken into account as cup count is truncated by the coffee machine when grinding, depending on the amount of available water.
+        Decisions may vary depending on cups and available water, keep water level at maximum to get best results.</li><br>
 </ul>
 
 =end html
