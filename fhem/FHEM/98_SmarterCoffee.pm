@@ -91,7 +91,7 @@ use HttpUtils;
 
 my $SmarterCoffee_Port = 2081;
 my $SmarterCoffee_DiscoveryInterval = 60 * 15;
-my $SmarterCoffee_StrengthExtraDefaultPercent = 1.2;
+my $SmarterCoffee_StrengthExtraDefaultPercent = 1.4;
 my $SmarterCoffee_StrengthDefaultWeights = "3.5 3.9 4.3";
 my %SmarterCoffee_Hotplate = (default => 15, min => 5, max => 40);
 
@@ -506,7 +506,7 @@ sub SmarterCoffee_Define($$) {
     if ($init_done) {
         $attr{$name}{alias} = "Coffee Machine";
         $attr{$name}{webCmd} = "strength:cups:start:hotplate:off";
-        $attr{$name}{'strength-extra-percent'} = "1.2";
+        $attr{$name}{'strength-extra-percent'} = $SmarterCoffee_StrengthExtraDefaultPercent;
         $attr{$name}{'default-hotplate-on-for-minutes'} = "15 5=20 8=30 10=35";
         $attr{$name}{'event-on-change-reading'} = ".*";
         $attr{$name}{'event-on-update-reading'} = "last_command.*";
@@ -1369,10 +1369,10 @@ sub SmarterCoffee_GetDevStateIcon {
         Toggles whether the command "<code>set &lt;name&gt; on</code>" is an alias to "<code>set &lt;name&gt; brew</code>".
         By default this is disabled to avoid accidental coffee brewing.</li><br>
     <li>
-        <code>attr &lt;name&gt; strength-extra-percent 1.2</code><br>
+        <code>attr &lt;name&gt; strength-extra-percent 1.4</code><br>
         Specifies the percentage of coffee to use relative to strength "<code>strong</code>" when brewing coffee with <code>extra</code> strength.
-        A value of "<code>1.2</code>" brews coffee that is 120% the strength of "<code>strong</code>" respectively "<code>0.8</code>" brews coffee that
-        is 80% the strength. Setting <code>strength-extra-percent</code> to <code>0</code> disables support for extra strength.
+        A value of "<code>1.4</code>" brews coffee that is 140% the strength of "<code>strong</code>" respectively "<code>0.6</code>" brews coffee that
+        is 60% the strength. Setting <code>strength-extra-percent</code> to <code>0</code> disables support for extra strength.
         <br><br>
         Note: Brewing coffee with <code>extra</code> strength uses strengths and cup counts natively supported by the machine and the configured percentage
         is likely not matched exactly.
@@ -1392,20 +1392,27 @@ sub SmarterCoffee_GetDevStateIcon {
     <li>
         <code>attr &lt;name&gt; strength-coffee-weights 3.5 3.9 4.3</code><br>
         Is the amount of coffee that the grinder produces per cup depending on the selected strength. This setting does not control the amount it only
-        tells the module what the grinder will produce. Changing the default values is therefore only required if the actual coffee machine produces
-        different results.<br>
+        tells the module what the grinder will produce. Changing the default values is therefore only required if the coffee machine produces
+        different results on the actually used beans.<br>
         The amounts are specified in grams per strength <code>[weak, medium, strong]</code> using whitespace as delimiter.
         <br><br>
-        This metric is used to calculate actual <code>strength</code> and <code>cups</code> to use when grinding coffee with <code>extra</code> strength.
-        E.g. for 120% extra strength, 3 cups require <tt style="white-space: nowrap">(3 * 4.3 * 1.2) = 15.48</tt> gramms of coffee.
-        In this example the closest match is grinding 4 cups with medium strength which produces <code>(4 * 3.9) = 15.6</code> gramms and the actual
-        brewing is then performed with 3 cups as originally requested.
+        The purpose of this metric is to calculate the actual <code>strength</code> and <code>cups</code> to use when grinding coffee with
+        <code>extra</code> strength. E.g. for 140% extra strength, 4 cups require <tt style="white-space: nowrap">(4 * 4.3 * 1.4) = 24.08</tt>
+        gramms of coffee. In this example the closest match is grinding 7 cups with weak strength which produces <code>(7 * 3.5) = 24.5</code> gramms.
+        The actual brewing is then performed with 4 cups as originally requested.
         <br><br>
         The algorithm tries to find the closest matching cup counts and strength value towards the target amount of coffee required for
         <code>extra</code> strength. It is technically not possible to control the amount of coffee directly, therefore the grams specified for the
-        different strengths are used select between native supported strengths <code>weak, medium, strong</code> that match the desired target the closest.
+        different strengths are used select between natively supported strengths <code>weak, medium, strong</code> that match the desired target the closest.
         Water level is also taken into account as cup count is truncated by the coffee machine when grinding, depending on the amount of available water.
-        Decisions may vary depending on cups and available water, keep water level at maximum to get best results.</li><br>
+        Decisions may vary depending on cups and available water, keep water level at maximum to get best results.
+        <br><br>
+        Note: SCAE (Speciality Coffee Association of Europe) recommends ~6 gramms of coffee per cup. To come close, 140% is the default value for
+        <code>extra</code> strength assuming that the default values for <code>strength-coffee-weights</code> apply to the used coffee beans.
+        As the density of coffee beans differs these defaults may be inappropriate. To get better results with a certain kind of beans it may make
+        sense to measure the actual produced weights and adjust the values (<code>strength-coffee-weights</code> and <code>strength-extra-percent</code>)
+        accordingly.
+        </li><br>
 </ul>
 
 =end html
