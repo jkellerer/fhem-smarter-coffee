@@ -521,15 +521,13 @@ sub SmarterCoffee_Define($$) {
         $hash->{DeviceName} = $param[2];
     }
 
-    $hash->{NOTIFYDEV} = $name;
+    $hash->{NOTIFYDEV} = "global,$name";
     $hash->{STATE} = "initializing";
 
     $hash->{".last_command"} =
         $hash->{".last_response"} =
         $hash->{".last_status"} =
         $hash->{".raw_last_status"} = "";
-
-    $hash->{".extra_strength.enabled"} = 1 if (ReadingsVal($name, "strength", "") =~ /^extra.*/);
 
     SmarterCoffee_Connect($hash);
 
@@ -621,7 +619,14 @@ sub SmarterCoffee_Set {
     if ($option eq "brew" or $option eq "defaults") {
         # Handle extra strong coffee
         if (($param[1] // ReadingsVal($hash->{NAME}, "strength", "")) =~ /^extra.*/) {
-            if (($param[3] // ReadingsVal($hash->{NAME}, "grinder", "")) eq "enabled" and $option ne "defaults") {
+            # Enable grinder in extra mode if required and not specified differently and option is not defaults.
+            my $grinderEnabled = (($param[3] // ReadingsVal($hash->{NAME}, "grinder", "")) eq "enabled");
+            if ($option ne "defaults" and not defined($param[3]) and not $grinderEnabled) {
+                SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "grinder", "enabled" ]});
+                $grinderEnabled = 1;
+            }
+
+            if ($option ne "defaults" and $grinderEnabled) {
                 if (SmarterCoffee_TranslateParamsForExtraStrength($hash, \@param, "grind")) {
                     my ($cups, $error) = ($hash->{".extra_strength.desired_cups"}, $hash->{".extra_strength.error_rate"});
                     Log3 $hash->{NAME}, 3, "Extra Strength :: Grinding [".join(" ", @param)."] to get $cups cups (error rate: $error%).";
@@ -750,18 +755,30 @@ sub SmarterCoffee_Set {
 sub SmarterCoffee_Notify($$) {
     my ($hash, $eventHash) = @_;
     my $name = $hash->{NAME};
+    my $senderName = $eventHash->{NAME};
 
-    # Return without any further action if the module is disabled or the event is not from this module.
-    return "" if (IsDisabled($name) or $eventHash->{NAME} ne $name);
+    # Return without any further action if the module is disabled or the event is not from this module or global.
+    return "" if (IsDisabled($name) or ($senderName ne $name and $senderName ne "global"));
 
     if (my $events = deviceEvents($eventHash, 1)) {
-        for (@{$events}) {
-            if ($_) {
-                SmarterCoffee_ProcessEventForExtraStrength($hash, $_);
-                SmarterCoffee_LogCommands($hash, $_);
+        if ($senderName eq "global") {
+    		 SmarterCoffee_ReadConfiguration($hash) if (grep(m/^INITIALIZED|REREADCFG$/, @{$events}));
+    	} else {
+            for (@{$events}) {
+                if ($_) {
+                    SmarterCoffee_ProcessEventForExtraStrength($hash, $_);
+                    SmarterCoffee_LogCommands($hash, $_);
+                }
             }
         }
     }
+}
+
+sub SmarterCoffee_ReadConfiguration($$) {
+    my ($hash) = @_;
+
+    # Restoring extra strength
+    $hash->{".extra_strength.enabled"} = 1 if (ReadingsVal($hash->{NAME}, "strength", "") =~ /^extra.*/);
 }
 
 sub SmarterCoffee_LogCommands($$) {
