@@ -20,7 +20,7 @@ Usage
    ~~~
 2. Execute the following command to add the module's source and receive automatic updates:
    ~~~
-   `update add https://dl.bintray.com/jkellerer/fhem-smarter-coffee/controls.txt`
+   update add https://dl.bintray.com/jkellerer/fhem-smarter-coffee/controls.txt
    ~~~
 
 #### Option B: Via manual file copy
@@ -30,7 +30,7 @@ Usage
 
 2. Optionally run `cd /opt/fhem && perl contrib/commandref_join.pl` to update your local command reference for getting information on how to use the module.
 
-### Configuring
+### Initializing / Enabling
 
 1. Restart FHEM after installing or updating the module.
 3. Execute the following command in the FHEM console and the module is **ready to use**:
@@ -38,7 +38,7 @@ Usage
    define coffee-machine SmarterCoffee
    ~~~
 
-The module has been tested with FHEM 5.7 (running on Linux) and smarter coffee firmware 22.
+_Note_: The module has been tested with FHEM 5.7 (running on Linux) and smarter coffee firmware 22.
 
 Contributing
 ------------
