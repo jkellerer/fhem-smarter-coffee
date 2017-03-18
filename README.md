@@ -1,6 +1,7 @@
 [![Download](https://api.bintray.com/packages/jkellerer/fhem-smarter-coffee/fhem/images/download.svg) ](https://bintray.com/jkellerer/fhem-smarter-coffee/fhem/_latestVersion)
 
-# fhem-smarter-coffee
+fhem-smarter-coffee
+===================
 
 Integrates a smarter coffee machine (http://smarter.am/) with the home automation server FHEM (http://fhem.de/fhem.html).
 
@@ -13,24 +14,29 @@ Usage
 
 #### Option A: Via "update" in FHEM console
 
-1. Run `update https://dl.bintray.com/jkellerer/fhem-smarter-coffee/controls.txt` to
-   add the latest version of the module once.
-2. Run `update add https://dl.bintray.com/jkellerer/fhem-smarter-coffee/controls.txt`
-   to add the module's source and receive automatic updates.
+1. Execute the following command to add the latest version of the module once:
+   ~~~
+   update https://dl.bintray.com/jkellerer/fhem-smarter-coffee/controls.txt
+   ~~~
+2. Execute the following command to add the module's source and receive automatic updates:
+   ~~~
+   `update add https://dl.bintray.com/jkellerer/fhem-smarter-coffee/controls.txt`
+   ~~~
 
-
-#### Option B: Via file copy
+#### Option B: Via manual file copy
 
 1. Copy [98_SmarterCoffee.pm](fhem/FHEM/98_SmarterCoffee.pm)
    into `/opt/fhem/FHEM/*` (the modules folder of your FHEM installation)
 
-   Optionally run `cd /opt/fhem && perl contrib/commandref_join.pl` to update the local command reference for more information on how to use the module.
+2. Optionally run `cd /opt/fhem && perl contrib/commandref_join.pl` to update your local command reference for getting information on how to use the module.
 
 ### Configuring
 
 1. Restart FHEM after installing or updating the module.
-3. Enter `define coffee-machine SmarterCoffee` in the FHEM console
-   and the module is **ready**
+3. Execute the following command in the FHEM console and the module is **ready to use**:
+   ~~~
+   define coffee-machine SmarterCoffee
+   ~~~
 
 The module has been tested with FHEM 5.7 (running on Linux) and smarter coffee firmware 22.
 
