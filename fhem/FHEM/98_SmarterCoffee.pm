@@ -38,9 +38,19 @@
 # - https://github.com/Tristan79/iBrew
 # .. and to all the volonteers crafting the FHEM project.
 #
-# Version: 0.7.0
+# Version: 0.8.0
 #
 #############################################################
+#
+# v0.8 - 2017-03-18
+#  - added "controls.txt" to support automatic updates in FHEM.
+#  - changed default value of 'strength extra' to 140% to match
+#    6 gramms coffee per cup by default.
+#  - improved dev-state icon and documentation.
+#  - fixed possible fallthrough to brew in pre-brew phase.
+#  - fixed a problem that strength extra could be started without
+#    also enabling grinder.
+#  - fixed 'strength extra' not being restored when restarting.
 #
 # v0.7 - 2016-08-28
 #  - added 'reset' defaults to factory settings command.

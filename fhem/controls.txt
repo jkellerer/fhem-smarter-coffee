@@ -1,0 +1,1 @@
+UPD 2017-03-18_14:09:04 67783 FHEM/98_SmarterCoffee.pm
