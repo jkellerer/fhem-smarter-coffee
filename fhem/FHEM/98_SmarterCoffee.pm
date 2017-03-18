@@ -559,7 +559,9 @@ sub SmarterCoffee_Get {
 sub SmarterCoffee_Set {
     my ($hash, @param) = @_;
 
-    my $desiredCups = ReadingsVal($hash->{NAME}, "cups", 1);
+    my $desiredCups = defined($hash->{".extra_strength.original_desired_cups"})
+        ? $hash->{".extra_strength.original_desired_cups"}
+        : ReadingsVal($hash->{NAME}, "cups", 1);
 
     my $optionToMessage = sub($$;$) {
         my ($option, $optionValue, $value) = @_;
@@ -694,7 +696,7 @@ sub SmarterCoffee_Set {
     } else {
         if (defined($param[0])) {
             # Resetting "extra" strength mode when strength is updated.
-            delete $hash->{".extra_strength.enabled"} if ($option eq "strength" and $hash->{".extra_strength.enabled"});
+            delete $hash->{".extra_strength.enabled"} if ($option eq "strength" and $param[0] ne "extra" and $hash->{".extra_strength.enabled"});
 
             # Eager updating strength and cups reading to avoid that widget updates are slower than starting a "brew".
             SmarterCoffee_UpdateReading($hash, $option, $param[0]) if ($option =~ /^strength|cups$/);
@@ -762,8 +764,8 @@ sub SmarterCoffee_Notify($$) {
 
     if (my $events = deviceEvents($eventHash, 1)) {
         if ($senderName eq "global") {
-    		 SmarterCoffee_ReadConfiguration($hash) if (grep(m/^INITIALIZED|REREADCFG$/, @{$events}));
-    	} else {
+            SmarterCoffee_ReadConfiguration($hash) if (grep(m/^INITIALIZED|REREADCFG$/, @{$events}));
+        } else {
             for (@{$events}) {
                 if ($_) {
                     SmarterCoffee_ProcessEventForExtraStrength($hash, $_);
@@ -796,7 +798,9 @@ sub SmarterCoffee_LogCommands($$) {
 sub SmarterCoffee_ProcessEventForExtraStrength($$) {
     my ($hash, $event) = @_;
 
-    if ($hash->{".extra_strength.enabled"}) {
+    my $eventSetsStrength = ($event =~ /^strength:\s*extra\s*$/);
+
+    if (($hash->{".extra_strength.enabled"} or $hash->{".extra_strength.phase-2"}) and not $eventSetsStrength) {
         if ($event =~ /^strength:\s*([^\s]+)\s*$/ and not $event =~ /.*extra.*/) {
             fhem("sleep 0.1 fix-strength ; set ".$hash->{NAME}." strength extra");
 
@@ -810,7 +814,7 @@ sub SmarterCoffee_ProcessEventForExtraStrength($$) {
             $hash->{".extra_strength.phase-2"} = SmarterCoffee_ExtraStrengthHandleBrewing($hash);
         }
     } else {
-        if ($event =~ /^strength:\s*extra\s*$/) {
+        if ($eventSetsStrength) {
             if (not (SmarterCoffee_EnableExtraStrengthMode($hash))) {
                 Log3 $hash->{NAME}, 3, "Extra-Strength :: Downgrading strength 'extra' to 'strong'";
                 fhem("sleep 0.1 fix-strength ; set ".$hash->{NAME}." strength strong");
@@ -922,6 +926,7 @@ sub SmarterCoffee_TranslateParamsForExtraStrength($$$) {
         }
 
         if (defined($grind{cups})) {
+            $hash->{".extra_strength.original_desired_cups"} = $grind{desired};
             $hash->{".extra_strength.desired_cups"} = $grind{desired};
             $hash->{".extra_strength.error_rate"} = $grind{error};
             $params->[0] = $grind{cups};
@@ -949,6 +954,7 @@ sub SmarterCoffee_TranslateParamsForExtraStrength($$$) {
             $params->[0] = $hash->{".extra_strength.desired_cups"};
             delete $hash->{".extra_strength.error_rate"};
             delete $hash->{".extra_strength.desired_cups"};
+            delete $hash->{".extra_strength.original_desired_cups"};
             delete $hash->{".extra_strength.pre_brew_phase_delay"} if $hash->{".extra_strength.pre_brew_phase_delay"};
         }
 
