@@ -16,11 +16,11 @@ Usage
 
 1. Execute the following command to add the latest version of the module once:
    ~~~
-   update https://dl.bintray.com/jkellerer/fhem-smarter-coffee/controls.txt
+   update all https://dl.bintray.com/jkellerer/fhem-smarter-coffee/controls_smarter-coffee.txt
    ~~~
 2. Execute the following command to add the module's source and receive automatic updates:
    ~~~
-   update add https://dl.bintray.com/jkellerer/fhem-smarter-coffee/controls.txt
+   update add https://dl.bintray.com/jkellerer/fhem-smarter-coffee/controls_smarter-coffee.txt
    ~~~
 
 #### Option B: Via manual file copy
