@@ -4,7 +4,7 @@
 
 Integrates a smarter coffee machine (http://smarter.am/) with the home automation server FHEM (http://fhem.de/fhem.html).
 
-![Screenshot](https://raw.githubusercontent.com/jkellerer/fhem-smarter-coffee/master/screenshot.png | width=794)
+<img src="https://raw.githubusercontent.com/jkellerer/fhem-smarter-coffee/master/screenshot.png" width="794">
 
 Usage
 -----
