@@ -42,6 +42,11 @@
 #
 #############################################################
 #
+# v0.9 - 2017-04-23
+#  - added "strength-extra-start-on-device-strength"
+#  - added "INITIATED_BREWING"
+#  - fixed timing problem when forcing "grinder" in extra mode.
+#
 # v0.8 - 2017-03-18
 #  - added "controls.txt" to support automatic updates in FHEM.
 #  - changed default value of 'strength extra' to 140% to match
@@ -502,6 +507,7 @@ sub SmarterCoffee_Initialize($) {
         ."strength-extra-percent "
         ."strength-extra-pre-brew-cups "
         ."strength-extra-pre-brew-delay-seconds "
+        ."strength-extra-start-on-device-strength:off,weak,medium,strong "
         .$readingFnAttributes;
 
     Log 5, "Initialized module 'SmarterCoffee'";
@@ -631,11 +637,12 @@ sub SmarterCoffee_Set {
     if ($option eq "brew" or $option eq "defaults") {
         # Handle extra strong coffee
         if (($param[1] // ReadingsVal($hash->{NAME}, "strength", "")) =~ /^extra.*/) {
-            # Enable grinder in extra mode if required and not specified differently and option is not defaults.
+            # Enable grinder in extra mode if required and option is not defaults.
             my $grinderEnabled = (($param[3] // ReadingsVal($hash->{NAME}, "grinder", "")) eq "enabled");
-            if ($option ne "defaults" and not defined($param[3]) and not $grinderEnabled) {
+            if ($option ne "defaults" and not $grinderEnabled and ($param[3] // "") ne "disabled") {
                 SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "grinder", "enabled" ]});
                 $grinderEnabled = 1;
+                $param[3] = "enabled" if defined($param[3]);
             }
 
             if ($option ne "defaults" and $grinderEnabled) {
@@ -708,14 +715,19 @@ sub SmarterCoffee_Set {
             # Resetting "extra" strength mode when strength is updated.
             delete $hash->{".extra_strength.enabled"} if ($option eq "strength" and $param[0] ne "extra" and $hash->{".extra_strength.enabled"});
 
-            # Eager updating strength and cups reading to avoid that widget updates are slower than starting a "brew".
-            SmarterCoffee_UpdateReading($hash, $option, $param[0]) if ($option =~ /^strength|cups$/);
+            # Eager updating strength, cups and grinder reading to avoid that widget updates are slower than starting a "brew".
+            SmarterCoffee_UpdateReading($hash, $option, $param[0]) if ($option =~ /^strength|cups|grinder$/);
 
             # Aborting device update when strength is "extra".
             return undef if ($option eq "strength" and $param[0] eq "extra");
 
             # Aborting device update if grinder is not changed (every command sent to the coffee machine flips the grinder setting).
             return undef if ($option eq "grinder" and $param[0] eq ReadingsVal($hash->{NAME}, "grinder", ""));
+        }
+
+        # Resetting internal states before executing "stop".
+        if ($option eq "stop" and ($param[0] // "") ne "no-reset") {
+            SmarterCoffee_ResetExtraStrengthMode($hash);
         }
 
         $messagePart = $optionToMessage->( $option, $param[0] );
@@ -778,6 +790,7 @@ sub SmarterCoffee_Notify($$) {
         } else {
             for (@{$events}) {
                 if ($_) {
+                    SmarterCoffee_ProcessLocallyInitiatedBrewState($hash, $_);
                     SmarterCoffee_ProcessEventForExtraStrength($hash, $_);
                     SmarterCoffee_LogCommands($hash, $_);
                 }
@@ -795,6 +808,7 @@ sub SmarterCoffee_ReadConfiguration($$) {
 
 sub SmarterCoffee_LogCommands($$) {
     my ($hash, $event) = @_;
+
     if ($event =~ /^last_command_success:\s*(yes|no)\s*$/i and (my $command = ReadingsVal($hash->{NAME}, "last_command", 0))) {
         my $message = ReadingsVal($hash->{NAME}, "last_command_message", "");
         if ($1 eq "yes") {
@@ -805,30 +819,58 @@ sub SmarterCoffee_LogCommands($$) {
     }
 }
 
+sub SmarterCoffee_ProcessLocallyInitiatedBrewState($$) {
+    my ($hash, $event) = @_;
+
+    # Setting "INITIATED_BREWING" when brewing was initiated by a command (and not by using the machine's buttons)
+    if ($event =~ /^last_command_success:\s*yes\s*$/i and ReadingsVal($hash->{NAME}, "last_command", 0) =~ /^brew.*/) {
+        $hash->{"INITIATED_BREWING"} = 1;
+    } elsif ($event =~ /^state:\s*done/) {
+        delete $hash->{"INITIATED_BREWING"} if defined($hash->{"INITIATED_BREWING"});
+    }
+}
+
 sub SmarterCoffee_ProcessEventForExtraStrength($$) {
     my ($hash, $event) = @_;
 
-    my $eventSetsStrength = ($event =~ /^strength:\s*extra\s*$/);
+    if ($event =~ /^strength:\s*extra\s*$/) {
+        # Listen to "set strength extra" and enable it if available.
+        if (not (SmarterCoffee_EnableExtraStrengthMode($hash))) {
+            Log3 $hash->{NAME}, 3, "Extra-Strength :: Downgrading strength 'extra' to 'strong'";
+            fhem("sleep 0.1 fix-strength ; set ".$hash->{NAME}." strength strong");
+        }
 
-    if (($hash->{".extra_strength.enabled"} or $hash->{".extra_strength.phase-2"}) and not $eventSetsStrength) {
-        if ($event =~ /^strength:\s*([^\s]+)\s*$/ and not $event =~ /.*extra.*/) {
+    } elsif ($event =~ /^state:\s*brewing/ and not $hash->{"INITIATED_BREWING"}) {
+        # Monitor event that brewing was started on the device without grinder and upgrade to 'extra' if configured in attributes.
+        if (ReadingsVal($hash->{NAME}, "grinder", "-") eq "disabled"
+            and (my $cups = int(ReadingsVal($hash->{NAME}, "cups", 0))) > 0
+            and (my $strength = ReadingsVal($hash->{NAME}, "strength", "")) eq AttrVal($hash->{NAME}, "strength-extra-start-on-device-strength", "off")
+            and SmarterCoffee_EnableExtraStrengthMode($hash) ) {
+
+            Log3 $hash->{NAME}, 3, "Extra-Strength :: Upgrading brewing $cups cups started with disabled grinder and strength '$strength' to strength 'extra'.";
+            SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "stop" ]});
+            SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "brew", $cups, "extra" ]});
+        }
+
+    } elsif (($hash->{".extra_strength.enabled"} or $hash->{".extra_strength.phase-2"})) {
+        # Listen to "set strength ?" while in extra mode and revert it to extra shortly.
+        if ($event =~ /^strength:\s*([^\s]+)\s*$/) {
             fhem("sleep 0.1 fix-strength ; set ".$hash->{NAME}." strength extra");
 
         } elsif ($event =~ /^state:\s*done/) {
+            # Finishing first round (grinding & first brew are done here)
             if ((my $delay = int($hash->{".extra_strength.pre_brew_phase_delay"} // 0)) > 0) {
                 InternalTimer(gettimeofday() + $delay, "SmarterCoffee_ExtraStrengthHandleBrewing", $hash, 0);
             } else {
-                delete $hash->{".extra_strength.phase-2"} if $hash->{".extra_strength.phase-2"};
+                if (int($hash->{".extra_strength.original_desired_cups"} // 0) > 0) {
+                    SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "cups", $hash->{".extra_strength.original_desired_cups"} ]});
+                }
+                SmarterCoffee_ResetExtraStrengthMode($hash);
             }
+
         } elsif ($event =~ /^state:\s*brewing/ and not $hash->{".extra_strength.phase-2"}) {
+            # Entering phase-2: Brewing after initial grinding at different settings.
             $hash->{".extra_strength.phase-2"} = SmarterCoffee_ExtraStrengthHandleBrewing($hash);
-        }
-    } else {
-        if ($eventSetsStrength) {
-            if (not (SmarterCoffee_EnableExtraStrengthMode($hash))) {
-                Log3 $hash->{NAME}, 3, "Extra-Strength :: Downgrading strength 'extra' to 'strong'";
-                fhem("sleep 0.1 fix-strength ; set ".$hash->{NAME}." strength strong");
-            }
         }
     }
 }
@@ -843,7 +885,8 @@ sub SmarterCoffee_ExtraStrengthHandleBrewing($) {
     );
 
     if (SmarterCoffee_TranslateParamsForExtraStrength($hash, \@params, "brew")) {
-        SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "stop" ]});
+        # Stopping brewing after initial grinding (skip stop if we are in phase-2 and came here due to pre-brew delay)
+        SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "stop", "no-reset" ]}) if not $hash->{".extra_strength.phase-2"};
 
         unshift(@params, "brew");
         unshift(@params, $hash->{NAME});
@@ -886,6 +929,24 @@ sub SmarterCoffee_EnableExtraStrengthMode($) {
         return 1;
     } else {
         return 0;
+    }
+}
+
+sub SmarterCoffee_ResetExtraStrengthMode($;$) {
+    my ($hash, $partial) = @_;
+
+    Log3 $hash->{NAME}, 4, ("Extra-Strength :: Resetting state to initial (partial: " . ($partial // 0) . ").");
+    foreach my $key ( keys %{$hash} ) {
+        my $resetableKey = ($key =~ /^\.extra_strength\..+$/ and $key ne ".extra_strength.enabled");
+
+        if (($partial // 0) and $resetableKey) {
+            $resetableKey = (not $key =~ /.+\.(original_desired_cups|desired_cups|pre_brew_phase_delay|phase-2).+$/);
+        }
+
+        if ($resetableKey) {
+            Log3 $hash->{NAME}, 5, "Extra-Strength :: Resetting $key";
+            delete $hash->{$key};
+        }
     }
 }
 
@@ -962,10 +1023,7 @@ sub SmarterCoffee_TranslateParamsForExtraStrength($$$) {
             $params->[0] = $preBrewCups;
         } else {
             $params->[0] = $hash->{".extra_strength.desired_cups"};
-            delete $hash->{".extra_strength.error_rate"};
-            delete $hash->{".extra_strength.desired_cups"};
-            delete $hash->{".extra_strength.original_desired_cups"};
-            delete $hash->{".extra_strength.pre_brew_phase_delay"} if $hash->{".extra_strength.pre_brew_phase_delay"};
+            SmarterCoffee_ResetExtraStrengthMode($hash, 1);
         }
 
         return 1;
@@ -1421,6 +1479,16 @@ sub SmarterCoffee_GetDevStateIcon {
     <li>
         <code>attr &lt;name&gt; strength-extra-pre-brew-cups 1</code><br>
         Specifies the number of cups that are brewed first before delaying brewing in extra mode. Specifying 0 disables "pre-brew".
+        </li><br>
+    <li>
+        <code>attr &lt;name&gt; strength-extra-start-on-device-strength [off, weak, medium, strong]</code><br>
+        Specifies a strength level that maps to strength 'extra' when starting brewing without grinder using the buttons at the coffee machine.
+        By default this option is set to "<code>off</code>" which means that strength 'extra' can only be used when starting brewing via FHEM.
+        <br>
+        E.g. a value of "<code>weak</code>" allows to brew coffee with extra strength by pressing the start button at the coffee machine
+        with strength set to "weak" and grinder set to "disabled" (= "Filter" in the display).
+        <br><br>
+        Note: Brewing started from FHEM is never affected by this setting.
         </li><br>
     <li>
         <code>attr &lt;name&gt; strength-coffee-weights 3.5 3.9 4.3</code><br>
