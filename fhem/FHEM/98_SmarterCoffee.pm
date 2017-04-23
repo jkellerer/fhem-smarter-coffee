@@ -43,9 +43,10 @@
 #############################################################
 #
 # v0.9 - 2017-04-23
-#  - added "strength-extra-start-on-device-strength"
-#  - added "INITIATED_BREWING"
+#  - added "strength-extra-start-on-device-strength".
+#  - added "INITIATED_BREWING".
 #  - fixed timing problem when forcing "grinder" in extra mode.
+#  - fixed "stop" using device button doesn't reset extra mode.
 #
 # v0.8 - 2017-03-18
 #  - added "controls.txt" to support automatic updates in FHEM.
@@ -727,7 +728,7 @@ sub SmarterCoffee_Set {
 
         # Resetting internal states before executing "stop".
         if ($option eq "stop" and ($param[0] // "") ne "no-reset") {
-            SmarterCoffee_ResetExtraStrengthMode($hash);
+            SmarterCoffee_ResetState($hash);
         }
 
         $messagePart = $optionToMessage->( $option, $param[0] );
@@ -776,6 +777,13 @@ sub SmarterCoffee_Set {
         ." hotplate_on_for_minutes:slider,5,5,40";
 }
 
+sub SmarterCoffee_ResetState($) {
+    my ($hash) = @_;
+
+    SmarterCoffee_ResetBrewState($hash);
+    SmarterCoffee_ResetExtraStrengthMode($hash);
+}
+
 sub SmarterCoffee_Notify($$) {
     my ($hash, $eventHash) = @_;
     my $name = $hash->{NAME};
@@ -790,7 +798,7 @@ sub SmarterCoffee_Notify($$) {
         } else {
             for (@{$events}) {
                 if ($_) {
-                    SmarterCoffee_ProcessLocallyInitiatedBrewState($hash, $_);
+                    SmarterCoffee_ProcessBrewStateEvents($hash, $_);
                     SmarterCoffee_ProcessEventForExtraStrength($hash, $_);
                     SmarterCoffee_LogCommands($hash, $_);
                 }
@@ -819,15 +827,30 @@ sub SmarterCoffee_LogCommands($$) {
     }
 }
 
-sub SmarterCoffee_ProcessLocallyInitiatedBrewState($$) {
+sub SmarterCoffee_ProcessBrewStateEvents($$) {
     my ($hash, $event) = @_;
 
     # Setting "INITIATED_BREWING" when brewing was initiated by a command (and not by using the machine's buttons)
     if ($event =~ /^last_command_success:\s*yes\s*$/i and ReadingsVal($hash->{NAME}, "last_command", 0) =~ /^brew.*/) {
         $hash->{"INITIATED_BREWING"} = 1;
+        $hash->{".brew-state"} = "brewing";
+
+    } elsif ($event =~ /^state:\s*(brewing|done)/) {
+        $hash->{".brew-state"} = $1;
+
+    } elsif ($event =~ /^state:\s*(ready|maintenance)/ and ($hash->{".brew-state"} // "") eq "brewing") {
+        Log3 $hash->{NAME}, 3, "Found state change from 'brewing' to '$1'. This looks like an abort, resetting all states to initial.";
+        SmarterCoffee_ResetState($hash);
+
     } elsif ($event =~ /^state:\s*done/) {
-        delete $hash->{"INITIATED_BREWING"} if defined($hash->{"INITIATED_BREWING"});
+        SmarterCoffee_ResetBrewState($hash);
     }
+}
+
+sub SmarterCoffee_ResetBrewState($) {
+    my ($hash) = @_;
+    delete $hash->{".brew-state"} if defined($hash->{".brew-state"});
+    delete $hash->{"INITIATED_BREWING"} if defined($hash->{"INITIATED_BREWING"});
 }
 
 sub SmarterCoffee_ProcessEventForExtraStrength($$) {
