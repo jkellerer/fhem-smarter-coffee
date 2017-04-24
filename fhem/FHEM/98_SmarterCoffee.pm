@@ -47,6 +47,9 @@
 #  - added "INITIATED_BREWING".
 #  - fixed timing problem when forcing "grinder" in extra mode.
 #  - fixed "stop" using device button doesn't reset extra mode.
+#  - fixed incorrect placement of start and end anchors in event
+#    regex leading to a too broad event handling for INITIALIZED
+#    events.
 #
 # v0.8 - 2017-03-18
 #  - added "controls.txt" to support automatic updates in FHEM.
@@ -717,7 +720,7 @@ sub SmarterCoffee_Set {
             delete $hash->{".extra_strength.enabled"} if ($option eq "strength" and $param[0] ne "extra" and $hash->{".extra_strength.enabled"});
 
             # Eager updating strength, cups and grinder reading to avoid that widget updates are slower than starting a "brew".
-            SmarterCoffee_UpdateReading($hash, $option, $param[0]) if ($option =~ /^strength|cups|grinder$/);
+            SmarterCoffee_UpdateReading($hash, $option, $param[0]) if ($option =~ /^(strength|cups|grinder)$/);
 
             # Aborting device update when strength is "extra".
             return undef if ($option eq "strength" and $param[0] eq "extra");
@@ -794,7 +797,7 @@ sub SmarterCoffee_Notify($$) {
 
     if (my $events = deviceEvents($eventHash, 1)) {
         if ($senderName eq "global") {
-            SmarterCoffee_ReadConfiguration($hash) if (grep(m/^INITIALIZED|REREADCFG$/, @{$events}));
+            SmarterCoffee_ReadConfiguration($hash) if (grep(m/^(INITIALIZED|REREADCFG)$/, @{$events}));
         } else {
             for (@{$events}) {
                 if ($_) {
