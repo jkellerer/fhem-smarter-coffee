@@ -129,6 +129,7 @@ my %SmarterCoffee_MessageMaps = (
         [ '00000000' => { grinder => "disabled", carafe => "missing", hotplate => "off", state => "maintenance" } ],
         [ '01000000' => { hotplate => "on" } ],
         [ '00000100' => { state => "ready" } ],
+        [ '00100000' => { state => "ready" } ], # Set when hotplate is off after being in "heating" state.
         [ '01000100' => { state => "done" } ],
         [ '01010000' => { state => "brewing" } ],
         [ '01100000' => { state => "heating" } ],
