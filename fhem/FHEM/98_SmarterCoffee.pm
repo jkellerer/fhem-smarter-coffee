@@ -835,15 +835,15 @@ sub SmarterCoffee_ProcessBrewStateEvents($$) {
         $hash->{"INITIATED_BREWING"} = 1;
         $hash->{".brew-state"} = "brewing";
 
-    } elsif ($event =~ /^state:\s*(brewing|done)/) {
-        $hash->{".brew-state"} = $1;
-
-    } elsif ($event =~ /^state:\s*(ready|maintenance)/ and ($hash->{".brew-state"} // "") eq "brewing") {
-        Log3 $hash->{NAME}, 3, "Found state change from 'brewing' to '$1'. This looks like an abort, resetting all states to initial.";
-        SmarterCoffee_ResetState($hash);
+    } elsif ($event =~ /^state:\s*brewing/) {
+        $hash->{".brew-state"} = "brewing";
 
     } elsif ($event =~ /^state:\s*done/) {
         SmarterCoffee_ResetBrewState($hash);
+
+    } elsif ($event =~ /^state:\s*(.+)$/ and ($hash->{".brew-state"} // "") eq "brewing") {
+        Log3 $hash->{NAME}, 3, "Found state change from 'brewing' to '$1'. This looks like an abort, resetting all states to initial.";
+        SmarterCoffee_ResetState($hash);
     }
 }
 
