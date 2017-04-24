@@ -1,0 +1,54 @@
+ v0.9 - 2017-04-24
+  - added "strength-extra-start-on-device-strength" which allows
+    brewing with "extra" strength using device buttons.
+  - added "INITIATED_BREWING" internals to see if FHEM started it.
+  - fixed timing problem when forcing "grinder" in extra mode.
+  - fixed "stop" using device button doesn't reset extra mode.
+  - fixed incorrect placement of start and end anchors in event
+    regex leading to a too broad event handling for INITIALIZED
+    events.
+  - fixed "hotplate off" didn't reset state to "ready".
+
+ v0.8 - 2017-03-18
+  - added "controls.txt" to support automatic updates in FHEM.
+  - changed default value of 'strength extra' to 140% to match
+    6 gramms coffee per cup by default.
+  - improved dev-state icon and documentation.
+  - fixed possible fallthrough to brew in pre-brew phase.
+  - fixed a problem that strength extra could be started without
+    also enabling grinder.
+  - fixed 'strength extra' not being restored when restarting.
+
+ v0.7 - 2016-08-28
+  - added 'reset' defaults to factory settings command.
+  - added 'get_defaults'.
+  - added 'strength-extra-pre-brew-*'.
+
+ v0.6 - 2016-08-20
+  - final updates & cleanup, preparation for initial checking.
+
+ v0.5 - 2016-08-19
+  - added strength "extra"
+  - added descale detection and descale command
+  - improvements in connection handling
+
+ v0.4 - 2016-08-17
+  - added "set defaults" command
+  - support reading device type and firmware version
+  - changed status detection from simple mapping to bitmasks
+  - handling carafe required dealing with "ready" state
+
+ v0.3 - 2016-08-06
+  - added custom state icon (embedded SVG)
+
+ v0.2 - 2016-07-30
+  - support auto discovery via UPD broadcast
+  - start brewing with custom / default settings
+  - stop brewing while running
+
+ v0.1 - 2016-07-29
+  - define Smarter Coffee based on fixed IP or hostname
+  - set cups, strength, grinder and toggle hotplate
+  - start brewing
+  - view detailed status
+
