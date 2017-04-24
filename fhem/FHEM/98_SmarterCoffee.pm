@@ -38,18 +38,20 @@
 # - https://github.com/Tristan79/iBrew
 # .. and to all the volonteers crafting the FHEM project.
 #
-# Version: 0.8.0
+# Version: 0.9.0
 #
 #############################################################
 #
-# v0.9 - 2017-04-23
-#  - added "strength-extra-start-on-device-strength".
-#  - added "INITIATED_BREWING".
+# v0.9 - 2017-04-24
+#  - added "strength-extra-start-on-device-strength" which allows
+#    brewing with "extra" strength using device buttons.
+#  - added "INITIATED_BREWING" internals to see if FHEM started it.
 #  - fixed timing problem when forcing "grinder" in extra mode.
 #  - fixed "stop" using device button doesn't reset extra mode.
 #  - fixed incorrect placement of start and end anchors in event
 #    regex leading to a too broad event handling for INITIALIZED
 #    events.
+#  - fixed "hotplate off" didn't reset state to "ready".
 #
 # v0.8 - 2017-03-18
 #  - added "controls.txt" to support automatic updates in FHEM.
