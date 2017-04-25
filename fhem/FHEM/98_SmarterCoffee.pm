@@ -38,10 +38,13 @@
 # - https://github.com/Tristan79/iBrew
 # .. and to all the volonteers crafting the FHEM project.
 #
-# Version: 0.9.0
+# Version: 0.9.1
 #
 #############################################################
 #
+# v0.9.1 - 2017-04-25
+#  - fixed "stop" detection interferring with "extra" strength.
+#  - added new state "grinding".
 # v0.9 - 2017-04-24
 #  - added "strength-extra-start-on-device-strength" which allows
 #    brewing with "extra" strength using device buttons.
@@ -122,7 +125,7 @@ my %SmarterCoffee_MessageMaps = (
         # BIT 2 = hotplate
         # BIT 3 = idle/heating
         # BIT 4 = brewing/descaling
-        # BIT 5 = ???
+        # BIT 5 = grinding
         # BIT 6 = ready/done
         # BIT 7 = grinder
         # BIT 8 = carafe
@@ -131,6 +134,7 @@ my %SmarterCoffee_MessageMaps = (
         [ '00000100' => { state => "ready" } ],
         [ '00100000' => { state => "ready" } ], # Set when hotplate is off after being in "heating" state.
         [ '01000100' => { state => "done" } ],
+        [ '00001000' => { state => "grinding" } ],
         [ '01010000' => { state => "brewing" } ],
         [ '01100000' => { state => "heating" } ],
         [ '00000010' => { grinder => "enabled" } ],
@@ -841,13 +845,13 @@ sub SmarterCoffee_ProcessBrewStateEvents($$) {
         $hash->{"INITIATED_BREWING"} = 1;
         $hash->{".brew-state"} = "brewing";
 
-    } elsif ($event =~ /^state:\s*brewing/) {
-        $hash->{".brew-state"} = "brewing";
+    } elsif ($event =~ /^state:\s*(brewing|grinding)/) {
+        $hash->{".brew-state"} = $1;
 
     } elsif ($event =~ /^state:\s*done/) {
         SmarterCoffee_ResetBrewState($hash);
 
-    } elsif ($event =~ /^state:\s*(.+)$/ and ($hash->{".brew-state"} // "") eq "brewing") {
+    } elsif ($event =~ /^state:\s*(.+)$/ and ($hash->{".brew-state"} // "") =~ /^(brewing|grinding)$/) {
         Log3 $hash->{NAME}, 3, "Found state change from 'brewing' to '$1'. This looks like an abort, resetting all states to initial.";
         SmarterCoffee_ResetState($hash);
     }
@@ -914,6 +918,9 @@ sub SmarterCoffee_ExtraStrengthHandleBrewing($) {
     );
 
     if (SmarterCoffee_TranslateParamsForExtraStrength($hash, \@params, "brew")) {
+        # Resetting brew state to ensure it doesn't interfere with stop command that runs with "no-reset" option.
+        SmarterCoffee_ResetBrewState($hash);
+
         # Stopping brewing after initial grinding (skip stop if we are in phase-2 and came here due to pre-brew delay)
         SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "stop", "no-reset" ]}) if not $hash->{".extra_strength.phase-2"};
 
@@ -1248,6 +1255,8 @@ sub SmarterCoffee_GetDevStateIcon {
     my $noWater = (ReadingsVal($name, "water", "none") eq "none" and $state eq "maintenance");
     my $waterLevel = ReadingsVal($name, "water_level", "0");
 
+    $state = "brewing" if ($state eq "grinding");
+
     $icon =~ s/(name="ready" opacity)="1"/$1="0"/g if $state ne "ready";
     $icon =~ s/(name="brewing" opacity)="1"/$1="0"/g if $state ne "brewing";
     $icon =~ s/(name="coffee-level" opacity)="1"/$1="0"/g if ($state ne "brewing" and $state ne "done");
@@ -1330,6 +1339,7 @@ sub SmarterCoffee_GetDevStateIcon {
             <li><code>opened / connected</code>: Intermediate states after connection has been established but before the machine's state is known.</li>
             <li><code>invalid</code>: The connected device is not a coffee machine.</li>
             <li><code>ready</code>: Ready to start brewing.</li>
+            <li><code>grinding</code>: Grinding coffee.</li>
             <li><code>brewing</code>: Brewing coffee.</li>
             <li><code>done</code>: Done brewing.</li>
             <li><code>heating</code>: Keeping coffee warm or reheating.</li>
