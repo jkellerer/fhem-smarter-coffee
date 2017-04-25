@@ -13,7 +13,7 @@ my @lines = split(/[\r\n]+/, read_file("./FHEM/98_SmarterCoffee.pm"));
 # Creates the update entries
 my $capture = 1;
 foreach my $line (@lines) {
-    $capture = 1 if (not $capture and $line =~ /^# v[0-9]+\.[0-9]+ - [0-9]{4}-[0-9]{2}-[0-9]{2}.*/);
+    $capture = 1 if (not $capture and $line =~ /^# v[0-9\.]+ - [0-9]{4}-[0-9]{2}-[0-9]{2}.*/);
     $capture = 0 if ($capture and $line =~ /^#{10}.+/);
 
     if ($capture and $line =~ /^#(.*)$/) {

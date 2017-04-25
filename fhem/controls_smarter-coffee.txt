@@ -1,1 +1,1 @@
-UPD 2017-04-24_20:19:05 72667 FHEM/98_SmarterCoffee.pm
+UPD 2017-04-25_09:49:00 73131 FHEM/98_SmarterCoffee.pm

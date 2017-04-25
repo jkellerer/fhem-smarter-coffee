@@ -1,3 +1,6 @@
+ v0.9.1 - 2017-04-25
+  - fixed "stop" detection interferring with "extra" strength.
+  - added new state "grinding".
  v0.9 - 2017-04-24
   - added "strength-extra-start-on-device-strength" which allows
     brewing with "extra" strength using device buttons.
