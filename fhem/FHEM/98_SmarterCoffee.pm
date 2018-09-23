@@ -851,9 +851,10 @@ sub SmarterCoffee_Notify($$) {
         } else {
             for (@{$events}) {
                 if ($_) {
-                    SmarterCoffee_ProcessBrewStateEvents($hash, $_);
-                    SmarterCoffee_ProcessEventForExtraStrength($hash, $_);
                     SmarterCoffee_LogCommands($hash, $_);
+                    SmarterCoffee_ProcessBrewStateEvents($hash, $_);
+                    SmarterCoffee_ProcessCarafeRemovedEvents($hash, $_);
+                    SmarterCoffee_ProcessEventForExtraStrength($hash, $_);
                 }
             }
         }
