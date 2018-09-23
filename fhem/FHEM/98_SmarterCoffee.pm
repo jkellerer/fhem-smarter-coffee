@@ -911,27 +911,84 @@ sub SmarterCoffee_ProcessCarafeRemovedEvents($$) {
 sub SmarterCoffee_ProcessBrewStateEvents($$) {
     my ($hash, $event) = @_;
 
+    # Handling invocation from timer
+    if (($hash->{".watchdog"} // 0) and defined($hash->{"hash"})) {
+        $event = $hash->{"token"} // "";
+        $hash = $hash->{"hash"};
+
+        if ($event eq ($hash->{".brew-state.token"} // "undefined")) {
+            Log3 $hash->{NAME}, 2, "Brew-State :: Watchdog aborts brewing. Expected state change to (brewing/grinding) but didn't see the change in time.";
+            $event = "state: aborted-by-watchdog";
+        }
+    }
+
     # Setting "INITIATED_BREWING" when brewing was initiated by a command (and not by using the machine's buttons)
-    if ($event =~ /^last_command_success:\s*yes\s*$/i and ReadingsVal($hash->{NAME}, "last_command", 0) =~ /^brew.*/) {
+    if ($event =~ /^last_command_success:\s*(yes|no)\s*$/i
+        and (my $success = $1)
+        and ReadingsVal($hash->{NAME}, "last_command", 0) =~ /^brew.*/) {
+
         $hash->{"INITIATED_BREWING"} = 1;
         $hash->{".brew-state"} = "brewing";
 
+        if ($success eq "yes") {
+            Log3 $hash->{NAME}, 4, "Brew-State :: Brewing initiated in FHEM.";
+
+            # Installing a watchdog: We must see a state change to "brewing/grinding" after 5 seconds, otherwise abort was initiated by the device.
+            if (AttrVal($hash->{NAME}, , "brewing-watchdog-disabled", "no") ne "yes") {
+                my $token = $hash->{".brew-state.token"} = "wd-token-" . srand();
+                my $args = {".watchdog" => 1, "hash" => $hash, "token" => $token};
+                InternalTimer(gettimeofday() + 5, "SmarterCoffee_ProcessBrewStateEvents", $args);
+            }
+
+        } else {
+            Log3 $hash->{NAME}, 2, "Brew-State :: Brewing failed to get initiated in FHEM, sending stop command.";
+            SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "stop" ]});
+        }
+
     } elsif ($event =~ /^state:\s*(brewing|grinding)/) {
+        Log3 $hash->{NAME}, 4, "Brew-State :: State '$1'.";
         $hash->{".brew-state"} = $1;
+        delete $hash->{".brew-state.token"} if (defined($hash->{".brew-state.token"}));
 
     } elsif ($event =~ /^state:\s*done/) {
         SmarterCoffee_ResetBrewState($hash);
 
-    } elsif ($event =~ /^state:\s*(.+)$/ and ($hash->{".brew-state"} // "") =~ /^(brewing|grinding)$/) {
-        Log3 $hash->{NAME}, 3, "Found state change from 'brewing' to '$1'. This looks like an abort, resetting all states to initial.";
-        SmarterCoffee_ResetState($hash);
+    } elsif ($event =~ /^state:\s*(.+)$/) {
+        my ($state, $brewState) = ($1, ($hash->{".brew-state"} // ""));
+
+        if (($brewState =~ /^(brewing|grinding)$/ and not $state =~ /^(brewing|grinding|heating)$/)) {
+            Log3 $hash->{NAME}, 3, "Brew-State :: Found state change from '$brewState' to '$state'. This looks like an abort, resetting all states to initial.";
+            SmarterCoffee_ResetState($hash);
+            $hash->{"ABORTED_BREWING"} = 1;
+
+        } elsif ($state eq "ready" && defined($hash->{"ABORTED_BREWING"})) {
+            SmarterCoffee_ResetBrewState($hash);
+        }
     }
 }
 
-sub SmarterCoffee_ResetBrewState($) {
-    my ($hash) = @_;
-    delete $hash->{".brew-state"} if defined($hash->{".brew-state"});
-    delete $hash->{"INITIATED_BREWING"} if defined($hash->{"INITIATED_BREWING"});
+sub SmarterCoffee_ResetBrewState($;$) {
+    my ($hash, $transitioning) = @_;
+
+    if (my $state = ($hash->{".brew-state"} // "") or defined($transitioning)) {
+        my $where = (defined($hash->{"INITIATED_BREWING"}) ? "in FHEM" : "on device");
+        if (defined($transitioning)) {
+            Log3 $hash->{NAME}, 4, ("Brew-State :: Transitioning '$state' to '$transitioning' (initiated $where)");
+        } else {
+            Log3 $hash->{NAME}, 4, ("Brew-State :: Reset/stopped '$state' (initiated $where)");
+        }
+    }
+
+    if (defined($transitioning)) {
+        $hash->{".brew-state"} = $transitioning;
+
+    } else {
+        delete $hash->{".brew-state"} if defined($hash->{".brew-state"});
+        delete $hash->{"INITIATED_BREWING"} if defined($hash->{"INITIATED_BREWING"});
+    }
+
+    delete $hash->{".brew-state.token"} if (defined($hash->{".brew-state.token"}));
+    delete $hash->{"ABORTED_BREWING"} if defined($hash->{"ABORTED_BREWING"});
 }
 
 sub SmarterCoffee_ProcessEventForExtraStrength($$) {
@@ -952,6 +1009,10 @@ sub SmarterCoffee_ProcessEventForExtraStrength($$) {
             and SmarterCoffee_EnableExtraStrengthMode($hash) ) {
 
             Log3 $hash->{NAME}, 3, "Extra-Strength :: Upgrading brewing $cups cups started with disabled grinder and strength '$strength' to strength 'extra'.";
+
+            # Resetting brew state to ensure it doesn't interfere with stop command.
+            SmarterCoffee_ResetBrewState($hash, "transitioning");
+
             SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "stop" ]});
             SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "brew", $cups, "extra" ]});
         }
@@ -991,7 +1052,7 @@ sub SmarterCoffee_ExtraStrengthHandleBrewing($) {
 
     if (SmarterCoffee_TranslateParamsForExtraStrength($hash, \@params, "brew")) {
         # Resetting brew state to ensure it doesn't interfere with stop command that runs with "no-reset" option.
-        SmarterCoffee_ResetBrewState($hash);
+        SmarterCoffee_ResetBrewState($hash, "transitioning");
 
         # Stopping brewing after initial grinding (skip stop if we are in phase-2 and came here due to pre-brew delay)
         SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "stop", "no-reset" ]}) if not $hash->{".extra_strength.phase-2"};
