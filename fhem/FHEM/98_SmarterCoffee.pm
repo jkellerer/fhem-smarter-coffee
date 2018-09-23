@@ -737,7 +737,19 @@ sub SmarterCoffee_Set {
         if (not defined($param[0])) {
             $param[0] = ($option ne "hotplate_on_for_minutes" and ReadingsVal($hash->{NAME}, "hotplate", "") ne "off") ? "off" : "on";
         }
-        $option = $param[0] =~ /^(0|no|disable|off).*$/i ? "hotplate_off" : "hotplate_on_for_minutes";
+
+        if ($option eq "hotplate_on_for_cups" or ($param[0] eq "on-for-cups" and ($param[1] // 0) > 0)) {
+            # Adjust desired cups when value is "on-for-cups [cups]" and cups are defined.
+            $param[0] = $param[1] if (($param[1] // "") =~ /^[0-9]+$/);
+            $desiredCups = int($param[0]) if (($param[0] // "") =~ /^[0-9]+$/);
+            $param[0] = "";
+            $param[1] = "";
+        }
+
+        $option = $param[0] =~ /^(0|no|disable|off).*$/i
+            ? "hotplate_off"
+            : "hotplate_on_for_minutes";
+
         $messagePart = $optionToMessage->( $option, $param[0], $param[1] );
 
     } else {
@@ -803,7 +815,9 @@ sub SmarterCoffee_Set {
         ." cups:slider,1,1,12"
         ." grinder:enabled,disabled"
         ." hotplate"
-        ." hotplate_on_for_minutes:slider,5,5,40";
+        ." hotplate_on_for_minutes:slider,5,5,40"
+        ." hotplate_on_for_cups:slider,1,1,12"
+        ." reconnect:noArg";
 }
 
 sub SmarterCoffee_ResetState($) {
@@ -1512,12 +1526,16 @@ sub SmarterCoffee_GetDevStateIcon {
         &lt;command&gt; is one of:<ul>
             <li><code>on</code><br>On for "<code>default-hotplate-on-for-minutes</code>" minutes (defaults to 15 minutes)</li>
             <li><code>on [5 - 40]</code><br>On for the specified amount of minutes</li>
+            <li><code>on-for-cups [1 - 12]</code><br>On for the amount of minutes that relates to the specified number of cups</li>
             <li><code>off</code></li>
         </ul>
     </li><br>
     <li>
         <code>set &lt;name&gt; hotplate_on_for_minutes [5 - 40]</code><br>
         Is an alias to "<code>set &lt;name&gt; hotplate on [5 - 40]</code>".</li><br>
+    <li>
+        <code>set &lt;name&gt; hotplate_on_for_cups [1 - 12]</code><br>
+        Is an alias to "<code>set &lt;name&gt; hotplate on-for-cups [1 - 12]</code>".</li><br>
     <li>
         <code>set &lt;name&gt; reconnect</code><br>
         Disconnects, optionally runs discovery (if hostname or address was omitted in the device definition) and reconnects.</li><br>
