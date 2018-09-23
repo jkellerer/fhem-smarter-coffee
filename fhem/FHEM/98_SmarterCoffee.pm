@@ -1009,7 +1009,11 @@ sub SmarterCoffee_ProcessEventForExtraStrength($$) {
             fhem("sleep 0.1 fix-strength ; set ".$hash->{NAME}." strength strong");
         }
 
-    } elsif ($event =~ /^state:\s*brewing/ and not $hash->{"INITIATED_BREWING"}) {
+    } elsif ($event =~ /^state:\s*brewing/
+             and not $hash->{"INITIATED_BREWING"}
+             and not $hash->{"ABORTED_BREWING"}
+             and ($hash->{".extra_strength.phase"} // 0) == 0) {
+
         # Monitor event that brewing was started on the device without grinder and upgrade to 'extra' if configured in attributes.
         if (ReadingsVal($hash->{NAME}, "grinder", "-") eq "disabled"
             and (my $cups = int(ReadingsVal($hash->{NAME}, "cups", 0))) > 0
