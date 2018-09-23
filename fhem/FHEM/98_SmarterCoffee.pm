@@ -1032,9 +1032,13 @@ sub SmarterCoffee_ProcessEventForExtraStrength($$) {
                 InternalTimer(gettimeofday() + $delay, "SmarterCoffee_ExtraStrengthHandleBrewing", $hash, 0);
 
             } else {
-                if (int($hash->{".extra_strength.original_desired_cups"} // 0) > 0) {
-                    SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "cups", $hash->{".extra_strength.original_desired_cups"} ]});
+                if ((my $cups = int($hash->{".extra_strength.original_desired_cups"} // 0)) > 0) {
+                    SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "cups", $cups ]});
                 }
+                if ((my $strength = ($hash->{".extra_strength.original_strength"} // "")) ne "") {
+                    SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "strength", $strength ]});
+                }
+
                 SmarterCoffee_ResetExtraStrengthMode($hash);
             }
 
@@ -1047,12 +1051,7 @@ sub SmarterCoffee_ProcessEventForExtraStrength($$) {
 
 sub SmarterCoffee_ExtraStrengthHandleBrewing($) {
     my ($hash) = @_;
-    my @params = (
-        ReadingsVal($hash->{NAME}, "cups", "-"),
-        ReadingsVal($hash->{NAME}, "strength", "-"),
-        ReadingsVal($hash->{NAME}, "hotplate_on_for_minutes", (ReadingsVal($hash->{NAME}, "cups_single_mode", "") eq "yes" ? 0 : "on")),
-        "disabled"
-    );
+    my @params = SmarterCoffee_ExtraStrengthCreateBrewParams($hash);
 
     if (SmarterCoffee_TranslateParamsForExtraStrength($hash, \@params, "brew")) {
         # Resetting brew state to ensure it doesn't interfere with stop command that runs with "no-reset" option.
@@ -1074,6 +1073,24 @@ sub SmarterCoffee_ExtraStrengthHandleBrewing($) {
     }
 
     return 0;
+}
+
+sub SmarterCoffee_ExtraStrengthCreateBrewParams($;$) {
+    my ($hash, $enableGrinder) = @_;
+    my $cupsMode = (ReadingsVal($hash->{NAME}, "cups_single_mode", "") eq "yes");
+
+    my @params = (
+        (int($hash->{".extra_strength.original_desired_cups"} // ReadingsNum($hash->{NAME}, "cups", 1))),
+        ($hash->{".extra_strength.original_strength"} // ReadingsVal($hash->{NAME}, "strength", "-")),
+
+        ReadingsVal($hash->{NAME}, "hotplate_on_for_minutes", ($cupsMode ? 0 : "on")),
+
+        (($enableGrinder // 0)
+            ? "enabled"
+            : "disabled")
+    );
+
+    return @params;
 }
 
 sub SmarterCoffee_IsExtraStrengthModeAvailable($;$) {
@@ -1113,7 +1130,7 @@ sub SmarterCoffee_ResetExtraStrengthMode($;$) {
         my $resettableKey = ($key =~ /^\.extra_strength\..+$/ and $key ne ".extra_strength.enabled");
 
         if (($partial // 0) and $resettableKey) {
-            $resettableKey = (not $key =~ /.+\.(original_desired_cups|desired_cups|pre_brew_phase_delay|phase-2).*$/);
+            $resettableKey = (not $key =~ /.+\.(original_|desired_|pre_brew_|phase).*$/);
         }
 
         if ($resettableKey) {
@@ -1174,6 +1191,7 @@ sub SmarterCoffee_TranslateParamsForExtraStrength($$$) {
         }
 
         if (defined($grind{cups})) {
+            $hash->{".extra_strength.original_strength"} = ReadingsVal($hash->{NAME}, "strength", "-");
             $hash->{".extra_strength.original_desired_cups"} = $grind{desired};
             $hash->{".extra_strength.desired_cups"} = $grind{desired};
             $hash->{".extra_strength.error_rate"} = $grind{error};
