@@ -116,6 +116,8 @@ use HttpUtils;
 
 my $SmarterCoffee_Port = 2081;
 my $SmarterCoffee_DiscoveryInterval = 60 * 15;
+my $SmarterCoffee_IOReadStatusTimeout = 30;
+my $SmarterCoffee_IOReadCommandTimeout = 5;
 my $SmarterCoffee_StrengthExtraDefaultPercent = 1.2;
 my $SmarterCoffee_StrengthDefaultWeights = "3.5 3.9 4.3";
 my $SmarterCoffee_DefaultCupsPerCarafeRemoved = "3";
@@ -390,15 +392,15 @@ sub SmarterCoffee_ParseStatusValues {
     );
 }
 
-sub SmarterCoffee_Connect($) {
-    my ($hash) = @_;
+sub SmarterCoffee_Connect($;$) {
+    my ($hash, $noImplicitDiscovery) = @_;
 
     my $isNewConnection = $hash->{STATE} eq "initializing";
 
     $hash->{STATE} = "disconnected";
     delete $hash->{INVALID_DEVICE} if defined($hash->{INVALID_DEVICE});
 
-    if ($hash->{AUTO_DETECT}) {
+    if ($hash->{AUTO_DETECT} and not $noImplicitDiscovery) {
         SmarterCoffee_RunDiscoveryProcess($hash, 1);
     }
 
@@ -407,12 +409,30 @@ sub SmarterCoffee_Connect($) {
             $hash->{DeviceName} .= ":$SmarterCoffee_Port";
         }
 
+        Log3 $hash->{NAME}, 3, "Connection :: Connecting to " . $hash->{DeviceName};
+
         DevIo_CloseDev($hash) if DevIo_IsOpen($hash);
         delete $hash->{DevIoJustClosed} if ($hash->{DevIoJustClosed});
 
         return SmarterCoffee_OpenIfRequiredAndWritePending($hash, $isNewConnection);
     }
     return 0;
+}
+
+sub SmarterCoffee_Disconnect($;$) {
+    my ($hash, $noReconnect) = @_;
+
+    Log3 $hash->{NAME}, 3, "Connection :: Disconnecting from " . ($hash->{DeviceName} // "unknown");
+
+    # Setting state to allow listening to "off"
+    SmarterCoffee_UpdateReading($hash, "state", "disconnected");
+
+    # Disconnecting DevIo and resetting state.
+    DevIo_Disconnected($hash);
+    SmarterCoffee_HandleInitialConnectState($hash);
+
+    # Reconnecting when device gets available again (if not skipped).
+    SmarterCoffee_Connect($hash, 1) if (not $noReconnect);
 }
 
 sub SmarterCoffee_OpenIfRequiredAndWritePending($;$) {
@@ -423,17 +443,20 @@ sub SmarterCoffee_OpenIfRequiredAndWritePending($;$) {
 sub SmarterCoffee_HandleInitialConnectState($) {
     my ($hash) = @_;
 
-    return if ($hash->{".initial-connection-state"});
+    if (DevIo_IsOpen($hash)) {
+        if (($hash->{STATE} eq "disconnected" or $hash->{STATE} eq "opened")) {
 
-    if (DevIo_IsOpen($hash) and ($hash->{STATE} eq "disconnected" or $hash->{STATE} eq "opened")) {
-        $hash->{".initial-connection-state"} = 1;
+            $hash->{STATE} = "connected";
 
-        $hash->{STATE} = "connected";
-        SmarterCoffee_Get($hash, @{[ $hash->{NAME}, "info" ]}) if (not $hash->{AUTO_DETECT});
-        SmarterCoffee_Get($hash, @{[ $hash->{NAME}, "carafe_required_status" ]});
-        SmarterCoffee_Get($hash, @{[ $hash->{NAME}, "cups_single_mode_status" ]});
-
-        delete $hash->{".initial-connection-state"};
+            if (not defined($hash->{".device-state-known"})) {
+                $hash->{".device-state-known"} = 1;
+                SmarterCoffee_Get($hash, @{[ $hash->{NAME}, "info" ]}) if (not $hash->{AUTO_DETECT});
+                SmarterCoffee_Get($hash, @{[ $hash->{NAME}, "carafe_required_status" ]});
+                SmarterCoffee_Get($hash, @{[ $hash->{NAME}, "cups_single_mode_status" ]});
+            }
+        }
+    } else {
+        delete $hash->{".device-state-known"} if (defined($hash->{".device-state-known"}));
     }
 }
 
@@ -457,7 +480,7 @@ sub SmarterCoffee_WritePending {
                 DevIo_SimpleWrite($hash, $pending, 1);
                 $hash->{".raw_last_status"} = "";
 
-                my $result = DevIo_SimpleReadWithTimeout($hash, 5);
+                my $result = DevIo_SimpleReadWithTimeout($hash, $SmarterCoffee_IOReadCommandTimeout);
                 if ($result) {
                     $result = SmarterCoffee_Read($hash, $result);
                 } else {
@@ -485,8 +508,17 @@ sub SmarterCoffee_Read($;$) {
     # Reset partial data buffer if it exceeds length of 512 (256 bytes) or when $buffer was specified explicitly.
     $hash->{PARTIAL} = "" if (not defined($hash->{PARTIAL}) or defined($buffer) or length($hash->{PARTIAL} // "") >= 512);
 
-    # Reading available bytes from the socket (if not specified from external).
-    $buffer = DevIo_SimpleRead($hash) if (not defined($buffer));
+    # Adding a watchdog that disconnects when no answer is received within the specified timeout (fixes broken timeout in DevIo).
+    RemoveInternalTimer($hash, "SmarterCoffee_Disconnect");
+
+    if (not defined($buffer)) {
+        if (DevIo_IsOpen($hash)) {
+            InternalTimer(gettimeofday() + $SmarterCoffee_IOReadStatusTimeout, "SmarterCoffee_Disconnect", $hash);
+        }
+
+        # Reading available bytes from the socket (if not specified from external).
+        $buffer = DevIo_SimpleRead($hash);
+    }
     return 0 if (not defined($buffer));
 
     # Appending message bytes as hex string.
@@ -809,8 +841,7 @@ sub SmarterCoffee_Set {
 
     } elsif ($option eq "disconnect" or $option eq "reconnect") {
         # This option is primarily to test if reconnect works.
-        DevIo_Disconnected($hash);
-        SmarterCoffee_Connect($hash) if ($option eq "reconnect");
+        SmarterCoffee_Disconnect($hash, ($option ne "reconnect"));
         return undef;
 
     } elsif ($option ne "?" and $option ne "help") {
