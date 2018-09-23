@@ -116,7 +116,7 @@ use HttpUtils;
 
 my $SmarterCoffee_Port = 2081;
 my $SmarterCoffee_DiscoveryInterval = 60 * 15;
-my $SmarterCoffee_StrengthExtraDefaultPercent = 1.4;
+my $SmarterCoffee_StrengthExtraDefaultPercent = 1.2;
 my $SmarterCoffee_StrengthDefaultWeights = "3.5 3.9 4.3";
 my $SmarterCoffee_DefaultCupsPerCarafeRemoved = "3";
 my $SmarterCoffee_MaxCupsInSingleCupMode = 3;
@@ -1755,10 +1755,10 @@ sub SmarterCoffee_GetDevStateIcon {
         Note: When "cups_remaining" is greater 0, "<code>set &lt;name&gt; on</code>" will only trigger the hotplate for reheating.
         Use "set-on-brews-coffee always" to disable this behaviour and always brew more coffee when setting "on".</li><br>
     <li>
-        <code>attr &lt;name&gt; strength-extra-percent 1.4</code><br>
+        <code>attr &lt;name&gt; strength-extra-percent 1.2</code><br>
         Specifies the percentage of coffee to use relative to strength "<code>strong</code>" when brewing coffee with <code>extra</code> strength.
-        A value of "<code>1.4</code>" brews coffee that is 140% the strength of "<code>strong</code>" respectively "<code>0.6</code>" brews coffee that
-        is 60% the strength. Setting <code>strength-extra-percent</code> to <code>0</code> disables support for extra strength.
+        A value of "<code>1.2</code>" brews coffee that is 120% the strength of "<code>strong</code>" respectively "<code>0.8</code>" brews coffee that
+        is 80% the strength. Setting <code>strength-extra-percent</code> to <code>0</code> disables support for extra strength.
         <br><br>
         Note: Brewing coffee with <code>extra</code> strength uses strengths and cup counts natively supported by the machine and the configured percentage
         is likely not matched exactly.
@@ -1798,12 +1798,6 @@ sub SmarterCoffee_GetDevStateIcon {
         different strengths are used select between natively supported strengths <code>weak, medium, strong</code> that match the desired target the closest.
         Water level is also taken into account as cup count is truncated by the coffee machine when grinding, depending on the amount of available water.
         Decisions may vary depending on cups and available water, keep water level at maximum to get best results.
-        <br><br>
-        Note: SCAE (Speciality Coffee Association of Europe) recommends ~6 gramms of coffee per cup. To come close, 140% is the default value for
-        <code>extra</code> strength assuming that the default values for <code>strength-coffee-weights</code> apply to the used coffee beans.
-        As the density of coffee beans differs these defaults may be inappropriate. To get better results with a certain kind of beans it may make
-        sense to measure the actual produced weights and adjust the values (<code>strength-coffee-weights</code> and <code>strength-extra-percent</code>)
-        accordingly.
         </li><br>
 </ul>
 
