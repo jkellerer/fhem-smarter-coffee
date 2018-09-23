@@ -695,6 +695,9 @@ sub SmarterCoffee_Set {
             }
         }
 
+        # Prevent setting anything except stop requests while brew is requested.
+        SmarterCoffee_ResetBrewState($hash, "requested") if ($option eq "brew");
+
         # Handle normal brew or set defaults
         if (not defined($param[0]) or $param[0] ne "current") {
             # Get message parts
