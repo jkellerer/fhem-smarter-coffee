@@ -118,6 +118,7 @@ my $SmarterCoffee_Port = 2081;
 my $SmarterCoffee_DiscoveryInterval = 60 * 15;
 my $SmarterCoffee_StrengthExtraDefaultPercent = 1.4;
 my $SmarterCoffee_StrengthDefaultWeights = "3.5 3.9 4.3";
+my $SmarterCoffee_DefaultCupsPerCarafeRemoved = "3";
 my $SmarterCoffee_MaxCupsInSingleCupMode = 3;
 my %SmarterCoffee_Hotplate = (default => 15, min => 5, max => 40);
 
@@ -518,6 +519,7 @@ sub SmarterCoffee_Initialize($) {
     $hash->{AttrList} = ""
         ."default-hotplate-on-for-minutes "
         ."ignore-max-cups "
+        ."cups-per-carafe-removed "
         ."set-on-brews-coffee "
         ."strength-coffee-weights "
         ."strength-extra-percent "
@@ -851,6 +853,37 @@ sub SmarterCoffee_LogCommands($$) {
         } else {
             Log3 $hash->{NAME}, 3, "Command :: Failed [$command]; Cause: $message";
         }
+    }
+}
+
+sub SmarterCoffee_ProcessCarafeRemovedEvents($$) {
+    my ($hash, $event) = @_;
+    my $carafeRequired = (ReadingsVal($hash->{NAME}, "carafe_required", "no") eq "yes");
+
+    # Resetting count when starting brewing.
+    if ($event =~ /^state:\s*(brewing|grinding)$/) {
+        my $count = int(ReadingsNum($hash->{NAME}, "carafe_removed_count", -1));
+        my $cups = int($hash->{".extra_strength.original_desired_cups"} // ReadingsNum($hash->{NAME}, "cups", 0));
+
+
+        if ($carafeRequired) {
+            SmarterCoffee_UpdateReading($hash, "carafe_removed_count", 0) if ($count > 0);
+            SmarterCoffee_UpdateReading($hash, "cups_remaining", $cups);
+
+        } elsif ($count > -1) {
+            fhem("deletereading " . $hash->{NAME} . " (cups_remaining|carafe_removed_.+)");
+        }
+
+    } elsif ($event =~ /^carafe:\s*missing$/ and $carafeRequired) {
+        my $count = int(ReadingsNum($hash->{NAME}, "carafe_removed_count", 0));
+        SmarterCoffee_UpdateReading($hash, "carafe_removed_count", $count + 1);
+
+        my $remainingCups = int(ReadingsNum($hash->{NAME}, "cups_remaining", -1));
+        my $cupsPerRemoved = int(AttrVal($hash->{NAME}, "cups-per-carafe-removed", $SmarterCoffee_DefaultCupsPerCarafeRemoved));
+
+        $remainingCups -= $cupsPerRemoved;
+        $remainingCups = 0 if ($remainingCups < 0);
+        SmarterCoffee_UpdateReading($hash, "cups_remaining", $remainingCups);
     }
 }
 
@@ -1382,6 +1415,9 @@ sub SmarterCoffee_GetDevStateIcon {
         Is "<code>yes</code>" or "<code>no</code>" as the carafe is required to start brewing or not.<br>
         This option can be configured via the smarter mobile app. Read disclaimer before turning off carafe detection.</li><br>
     <li>
+        <code>carafe_remove_count</code><br>
+        The number of times that the carafe was removed since the last successful brew.</li><br>
+    <li>
         <code>cups_max</code><br>
         The estimated maximum brewable cups when taking current water level into account.</li><br>
     <li>
@@ -1390,6 +1426,10 @@ sub SmarterCoffee_GetDevStateIcon {
         This option can be configured via the smarter mobile app.
         When enabled "<code>set &lt;name&gt; brew</code>" will not enable the hotplate and "<code>cups_max</code>" is limited to <code>3</code>.
         In single cup mode, cups [1,2,3] is used for one [small,medium,large] cup.</li><br>
+    <li>
+        <code>cups_remaining</code><br>
+        The estimated cups remaining in the carafe when taking average cups per carafe-remove-count into account.
+        Remaining cups is set to 0 when <code>carafe_remove_count * cups-per-carafe-removed</code> is larger than <code>cups</code></li><br>
     <li>
         <code>water</code> and <code>water_level</code><br>
         Is [<code>none, low, half, full</code>] and [<code>0, 25, 50, 100</code>] indicating the amount of water that remains in the tank.<br>
@@ -1517,6 +1557,10 @@ sub SmarterCoffee_GetDevStateIcon {
         By default "<code>attr &lt;name&gt; ignore-max-cups 1</code>" is assumed which means that the state "<code>ready</code>" is not
         related to "<code>cups_max</code>" if this attribute is not set. Set this attribute to "0" if the state should turn to "<code>maintenance</code>"
         when the selected cup count is larger than "<code>cups_max</code>".</li><br>
+    <li>
+        <code>attr &lt;name&gt; cups-per-carafe-removed 3</code><br>
+        Defines the average amount of cups that are removed from the carafe per carafe removed count and is used to calculate
+        <code>cups_remaining</code>.</li><br>
     <li>
         <code>attr &lt;name&gt; set-on-brews-coffee [0, 1]</code><br>
         Toggles whether the command "<code>set &lt;name&gt; on</code>" is an alias to "<code>set &lt;name&gt; brew</code>".
