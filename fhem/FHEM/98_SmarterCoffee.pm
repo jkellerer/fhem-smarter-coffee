@@ -645,7 +645,10 @@ sub SmarterCoffee_Set {
     }
 
     # Support "set <name> off"
-    $option = "stop" if ($option =~ /^off$/i);
+    if ($option =~ /^off$/i) {
+        SmarterCoffee_UpdateReading($hash, "state", "off"); # Setting state to allow listening to "off"
+        $option = "stop";
+    }
 
     # Support "set <name> on" and "set <name> start"
     if (($option =~ /^on$/i and AttrVal($hash->{NAME}, "set-on-brews-coffee", "0") =~ /^(yes|true|1)$/i) or $option =~ /^start$/i) {
