@@ -635,6 +635,15 @@ sub SmarterCoffee_Set {
     # Command & params pre-processing
     my ($instanceName, $option, $messagePart) = (shift @param, shift @param, undef);
 
+    # Security guard, support only "set off/stop/reset" and "set strength extra" when brewing is in progress.
+    if ((my $bc = ($hash->{".brew-state"} // 0))
+        and defined($option)
+        and not $option =~ /^(off|stop|reset)$/i
+        and not ($option eq "strength" and ($param[0] // "") eq "extra")) {
+
+        return ("Brewing in progress (state: $bc), [set $option " . join(" ", @param) . "] is not available. Only off/stop/reset is supported.");
+    }
+
     # Support "set <name> off"
     $option = "stop" if ($option =~ /^off$/i);
 
