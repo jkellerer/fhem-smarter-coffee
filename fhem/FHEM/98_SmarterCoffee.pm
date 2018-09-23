@@ -36,15 +36,16 @@
 # - https://github.com/nanab/smartercoffee
 # - https://github.com/petermajor/SmartThingsSmarterCoffee
 # - https://github.com/Tristan79/iBrew
-# .. and to all the volonteers crafting the FHEM project.
+# .. and to all the volunteers crafting the FHEM project.
 #
 # Version: 0.9.1
 #
 #############################################################
 #
 # v0.9.1 - 2017-04-25
-#  - fixed "stop" detection interferring with "extra" strength.
+#  - fixed "stop" detection interfering with "extra" strength.
 #  - added new state "grinding".
+#
 # v0.9 - 2017-04-24
 #  - added "strength-extra-start-on-device-strength" which allows
 #    brewing with "extra" strength using device buttons.
@@ -233,7 +234,7 @@ sub SmarterCoffee_ParseMessage {
                         }
                         $updateReading->( "last_command", $hash->{".last_set_command"} );
                     }, 1
-                    , 1);
+                , 1);
             } else {
                 Log3 $hash->{NAME}, 3, "Connection :: Unknown command response '$message'.";
             }
@@ -680,7 +681,7 @@ sub SmarterCoffee_Set {
                 # Translating input to message part.
                 $input{$key} = $optionToMessage->( $key, $input{$key} ) if defined($input{$key});
 
-                # Taking message part from readings if input didn't specifiy it (using "on" for "hotplate" as the reading would be missleading.
+                # Taking message part from readings if input didn't specify it (using "on" for "hotplate" as the reading would be misleading.
                 if (not defined($input{$key})) {
                     $readingsValues{$key} = ($key eq "hotplate"
                         ? (ReadingsVal($hash->{NAME}, "cups_single_mode", "") eq "yes" ? 0 : "on")
@@ -894,6 +895,7 @@ sub SmarterCoffee_ProcessEventForExtraStrength($$) {
             # Finishing first round (grinding & first brew are done here)
             if ((my $delay = int($hash->{".extra_strength.pre_brew_phase_delay"} // 0)) > 0) {
                 InternalTimer(gettimeofday() + $delay, "SmarterCoffee_ExtraStrengthHandleBrewing", $hash, 0);
+
             } else {
                 if (int($hash->{".extra_strength.original_desired_cups"} // 0) > 0) {
                     SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "cups", $hash->{".extra_strength.original_desired_cups"} ]});
@@ -930,7 +932,7 @@ sub SmarterCoffee_ExtraStrengthHandleBrewing($) {
         my $phase = int($hash->{".extra_strength.pre_brew_phase_delay"} // 0) > 0
             ? "2 (pre brew)"
             : "2";
-        Log3 $hash->{NAME}, 4, "Extra-Strength :: Phase $phase [set ".join(" ", @params)."]";
+        Log3 $hash->{NAME}, 4, "Extra-Strength :: Phase $phase [set " . join(" ", @params) . "]";
 
         SmarterCoffee_Set($hash, @params);
         return 1;
@@ -940,7 +942,7 @@ sub SmarterCoffee_ExtraStrengthHandleBrewing($) {
 }
 
 sub SmarterCoffee_IsExtraStrengthModeAvailable($;$) {
-    my ($hash, $slient) = @_;
+    my ($hash, $silent) = @_;
 
     my $extraPercent = AttrVal($hash->{NAME}, "strength-extra-percent", $SmarterCoffee_StrengthExtraDefaultPercent);
     my $preBrew = int(AttrVal($hash->{NAME}, "strength-extra-pre-brew-cups", 1)) * int(AttrVal($hash->{NAME}, "strength-extra-pre-brew-delay-seconds", 0));
@@ -948,7 +950,7 @@ sub SmarterCoffee_IsExtraStrengthModeAvailable($;$) {
     if ($extraPercent > 0 and ($extraPercent != 1 or $preBrew > 0) and $extraPercent < 2.5) {
         return 1;
     } else {
-        Log3 $hash->{NAME}, (($slient // 1) ? 5 : 3),
+        Log3 $hash->{NAME}, (($silent // 1) ? 5 : 3),
             "Extra-Strength :: Strength 'extra' is disabled as [strength-extra-percent = $extraPercent] is out of range (0 < x < 2.5)";
         return 0;
     }
@@ -973,13 +975,13 @@ sub SmarterCoffee_ResetExtraStrengthMode($;$) {
 
     Log3 $hash->{NAME}, 4, ("Extra-Strength :: Resetting state to initial (partial: " . ($partial // 0) . ").");
     foreach my $key ( keys %{$hash} ) {
-        my $resetableKey = ($key =~ /^\.extra_strength\..+$/ and $key ne ".extra_strength.enabled");
+        my $resettableKey = ($key =~ /^\.extra_strength\..+$/ and $key ne ".extra_strength.enabled");
 
-        if (($partial // 0) and $resetableKey) {
-            $resetableKey = (not $key =~ /.+\.(original_desired_cups|desired_cups|pre_brew_phase_delay|phase-2).+$/);
+        if (($partial // 0) and $resettableKey) {
+            $resettableKey = (not $key =~ /.+\.(original_desired_cups|desired_cups|pre_brew_phase_delay|phase-2).*$/);
         }
 
-        if ($resetableKey) {
+        if ($resettableKey) {
             Log3 $hash->{NAME}, 5, "Extra-Strength :: Resetting $key";
             delete $hash->{$key};
         }
@@ -996,7 +998,11 @@ sub SmarterCoffee_TranslateParamsForExtraStrength($$$) {
 
         my @strengths = ("weak", "medium", "strong");
         my @weights = split(/\s+/, AttrVal($hash->{NAME}, "strength-coffee-weights", $SmarterCoffee_StrengthDefaultWeights));
-        while (int(@weights) < 3) { push(@weights, (int(@weights) ? $weights[int(@weights) - 1] : 4.3)) }
+        while (int(@weights) < 3) {
+            push(@weights, (int(@weights)
+                ? $weights[int(@weights) - 1]
+                : 4.3))
+        }
 
         Log3 $hash->{NAME}, 4, "Extra-Strength :: Reference weights: ".join(" ", @weights)." (".join(" ", @strengths).")";
 
@@ -1057,6 +1063,7 @@ sub SmarterCoffee_TranslateParamsForExtraStrength($$$) {
             $hash->{".extra_strength.pre_brew_phase_delay"} = $preBrewDelay;
             $hash->{".extra_strength.desired_cups"} -= $preBrewCups;
             $params->[0] = $preBrewCups;
+
         } else {
             $params->[0] = $hash->{".extra_strength.desired_cups"};
             SmarterCoffee_ResetExtraStrengthMode($hash, 1);
@@ -1306,7 +1313,7 @@ sub SmarterCoffee_GetDevStateIcon {
     Integrates the equally called Wi-Fi coffee machine (<code>http://smarter.am/</code>) with FHEM.
     <br><br>
     <i>Prerequisite</i>:<br>
-    Make sure the machine can be controlled by the smarter mobile app when both are connected to the same network as fhem.<br>
+    Make sure the machine can be controlled by the smarter mobile app when both are connected to the same network as FHEM.<br>
     If in doubt check the official documentation or official support forum to get help with integrating the coffee machine into your network.
 </ul>
 <br>
@@ -1538,7 +1545,7 @@ sub SmarterCoffee_GetDevStateIcon {
         <br><br>
         The purpose of this metric is to calculate the actual <code>strength</code> and <code>cups</code> to use when grinding coffee with
         <code>extra</code> strength. E.g. for 140% extra strength, 4 cups require <tt style="white-space: nowrap">(4 * 4.3 * 1.4) = 24.08</tt>
-        gramms of coffee. In this example the closest match is grinding 7 cups with weak strength which produces <code>(7 * 3.5) = 24.5</code> gramms.
+        grams of coffee. In this example the closest match is grinding 7 cups with weak strength which produces <code>(7 * 3.5) = 24.5</code> grams.
         The actual brewing is then performed with 4 cups as originally requested.
         <br><br>
         The algorithm tries to find the closest matching cup counts and strength value towards the target amount of coffee required for
