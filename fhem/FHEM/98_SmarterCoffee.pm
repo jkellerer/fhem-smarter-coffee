@@ -653,8 +653,15 @@ sub SmarterCoffee_Set {
     }
 
     # Support "set <name> on" and "set <name> start"
-    if (($option =~ /^on$/i and AttrVal($hash->{NAME}, "set-on-brews-coffee", "0") =~ /^(yes|true|1)$/i) or $option =~ /^start$/i) {
-        $option = "brew";
+    if (($option =~ /^on$/i and AttrVal($hash->{NAME}, "set-on-brews-coffee", "0") =~ /^(yes|true|1|always)$/i)
+        or $option =~ /^start$/i) {
+        SmarterCoffee_UpdateReading($hash, "state", $option); # Setting state to allow listening on ("on" & "start")
+
+        if (not ($1 // "") eq "always" and $option =~ /^on$/i and ReadingsNum($hash->{NAME}, "cups_remaining", 0) > 0) {
+            $option = "hotplate_on_for_cups";
+        } else {
+            $option = "brew";
+        }
     }
 
     # Support "set 6-cups" as alias to "set brew 6" (for better readable webCmds)
@@ -1414,6 +1421,9 @@ sub SmarterCoffee_GetDevStateIcon {
             <li><code>done</code>: Done brewing.</li>
             <li><code>heating</code>: Keeping coffee warm or reheating.</li>
             <li><code>maintenance</code>: Maintenance is needed to get ready for brewing (e.g. water or carafe is missing).</li>
+            <li><code>start</code>: Intermediate state when "start" was requested.</li>
+            <li><code>on</code>: Intermediate state when "on" was requested.</li>
+            <li><code>off</code>: Intermediate state when "off" was requested.</li>
         </ul>
     </li><br>
     <li>
@@ -1580,9 +1590,11 @@ sub SmarterCoffee_GetDevStateIcon {
         Defines the average amount of cups that are removed from the carafe per carafe removed count and is used to calculate
         <code>cups_remaining</code>.</li><br>
     <li>
-        <code>attr &lt;name&gt; set-on-brews-coffee [0, 1]</code><br>
+        <code>attr &lt;name&gt; set-on-brews-coffee [0, 1, always]</code><br>
         Toggles whether the command "<code>set &lt;name&gt; on</code>" is an alias to "<code>set &lt;name&gt; brew</code>".
-        By default this is disabled to avoid accidental coffee brewing.</li><br>
+        By default this is disabled to avoid accidental coffee brewing.
+        Note: When "cups_remaining" is greater 0, "<code>set &lt;name&gt; on</code>" will only trigger the hotplate for reheating.
+        Use "set-on-brews-coffee always" to disable this behaviour and always brew more coffee when setting "on".</li><br>
     <li>
         <code>attr &lt;name&gt; strength-extra-percent 1.4</code><br>
         Specifies the percentage of coffee to use relative to strength "<code>strong</code>" when brewing coffee with <code>extra</code> strength.
