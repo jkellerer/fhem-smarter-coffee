@@ -118,6 +118,7 @@ my $SmarterCoffee_Port = 2081;
 my $SmarterCoffee_DiscoveryInterval = 60 * 15;
 my $SmarterCoffee_StrengthExtraDefaultPercent = 1.4;
 my $SmarterCoffee_StrengthDefaultWeights = "3.5 3.9 4.3";
+my $SmarterCoffee_MaxCupsInSingleCupMode = 3;
 my %SmarterCoffee_Hotplate = (default => 15, min => 5, max => 40);
 
 my %SmarterCoffee_MessageMaps = (
@@ -361,8 +362,11 @@ sub SmarterCoffee_ParseStatusValues {
             }
 
             # Adding calculated readings
-            if (defined($values->{"water"}) and (my $maxCups = int(($values->{"water"}{"water_level"} // 0) / 100 * 12))) {
-                $maxCups = 3 if ($maxCups > 3 and ReadingsVal($hash->{NAME}, "cups_single_mode", "") eq "yes");
+            if (defined($values->{"water"})) {
+                my $maxCups = int(($values->{"water"}{"water_level"} // 0) / 100 * 12);
+                if ($maxCups > 3 and ReadingsVal($hash->{NAME}, "cups_single_mode", "") eq "yes") {
+                    $maxCups = $SmarterCoffee_MaxCupsInSingleCupMode;
+                }
                 $updateReading->( "cups_max", $maxCups );
             }
 
