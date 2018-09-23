@@ -35,10 +35,49 @@ Usage
 1. Restart FHEM after installing or updating the module.
 3. Execute the following command in the FHEM console and the module is **ready to use**:
    ~~~
-   define coffee-machine SmarterCoffee
+   define coffee_machine SmarterCoffee
    ~~~
 
-_Note_: The module has been tested with FHEM 5.7 (running on Linux) and smarter coffee firmware 22.
+_Note_: The module has been tested with FHEM 5.7 (running on Linux) and smarter coffee firmware 22 (first version of SC).
+
+Customization Examples
+----------------------
+
+### Automatic Hotplate Control
+
+The following config snippet automates hotplate control by the use of the "cups_remaining" reading:
+
+~~~ .perl
+# Coffee machine
+define coffee_machine SmarterCoffee
+attr coffee_machine cups-per-carafe-removed 2
+
+# BEGIN: Automatic hotplate logic ----
+
+# Reheat when there are remaining cups
+define coffee_machine_reheat_logic DOIF ([coffee_machine] eq "off")\
+  (setreading coffee_machine cups_remaining 0)\
+DOELSEIF ([coffee_machine] =~ "(brewing|grinding)" or [coffee_machine:carafe_required] eq "no")\
+  ()\
+DOELSEIF ([coffee_machine:hotplate] eq "off" and [coffee_machine:cups_remaining] > 0)\
+  (set coffee_machine hotplate on-for-cups {(ReadingsNum("coffee_machine", "cups_remaining", 0))})\
+DOELSEIF ([coffee_machine:cups_remaining] == 0)\
+  (set coffee_machine hotplate off)
+attr coffee_machine_reheat_logic do always
+
+# Stop heating when carafe is removed for >=40 seconds
+define coffee_machine_reheat_stop DOIF ([coffee_machine:carafe] eq "missing" and [coffee_machine:hotplate] eq "on")\
+  (setreading coffee_machine cups_remaining 0)\
+  (set coffee_machine hotplate off)
+attr coffee_machine_reheat_stop wait 40
+
+# Stop heating when hotplate is on for 75 minutes
+define coffee_machine_reheat_max_time DOIF ([coffee_machine:cups_remaining] > 0)\
+  (setreading coffee_machine cups_remaining 0)
+attr coffee_machine_reheat_max_time wait 4500
+
+# END: Automatic hotplate logic ----
+~~~
 
 Contributing
 ------------
