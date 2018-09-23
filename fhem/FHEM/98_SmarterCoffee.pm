@@ -683,8 +683,13 @@ sub SmarterCoffee_Set {
 
             if ($option ne "defaults" and $grinderEnabled) {
                 if (SmarterCoffee_TranslateParamsForExtraStrength($hash, \@param, "grind")) {
-                    my ($cups, $error) = ($hash->{".extra_strength.desired_cups"}, $hash->{".extra_strength.error_rate"});
-                    Log3 $hash->{NAME}, 3, "Extra Strength :: Grinding [".join(" ", @param)."] to get $cups cups (error rate: $error%).";
+                    my ($cups, $error, $cycle, $cycles) = (
+                        $hash->{".extra_strength.desired_cups"},
+                        $hash->{".extra_strength.error_rate"},
+                        $hash->{".extra_strength.current_grind_cycle"},
+                        $hash->{".extra_strength.grind_cycles"});
+
+                    Log3 $hash->{NAME}, 3, "Extra Strength :: Grinding [".join(" ", @param)."] to get $cups cups (cycle: $cycle of $cycles, deviation: $error%).";
                 } else {
                     return "strength 'extra' failed. check water level.";
                 }
@@ -1020,7 +1025,7 @@ sub SmarterCoffee_ProcessEventForExtraStrength($$) {
             SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "brew", $cups, "extra" ]});
         }
 
-    } elsif (($hash->{".extra_strength.enabled"} or $hash->{".extra_strength.phase-2"})) {
+    } elsif ($hash->{".extra_strength.enabled"} or int($hash->{".extra_strength.phase"} // 0) > 0) {
         # Listen to "set strength ?" while in extra mode and revert it to extra shortly.
         if ($event =~ /^strength:\s*([^\s]+)\s*$/) {
             fhem("sleep 0.1 fix-strength ; set ".$hash->{NAME}." strength extra");
@@ -1042,11 +1047,52 @@ sub SmarterCoffee_ProcessEventForExtraStrength($$) {
                 SmarterCoffee_ResetExtraStrengthMode($hash);
             }
 
-        } elsif ($event =~ /^state:\s*brewing/ and not $hash->{".extra_strength.phase-2"}) {
-            # Entering phase-2: Brewing after initial grinding at different settings.
-            $hash->{".extra_strength.phase-2"} = SmarterCoffee_ExtraStrengthHandleBrewing($hash);
+        } elsif ($event =~ /^state:\s*brewing/) {
+            if (SmarterCoffee_ExtraStrengthHandleMultipleGrindCycles($hash)) {
+                # Repeat phase-1: Grind again with different settings.
+
+            } elsif (defined($hash->{".extra_strength.phase"})
+                     and int($hash->{".extra_strength.phase"} // 0) < 2
+                     and SmarterCoffee_ExtraStrengthHandleBrewing($hash)) {
+                # Entering phase 2: Brewing after initial grinding at different settings.
+                $hash->{".extra_strength.phase"} = 2;
+            }
         }
     }
+}
+
+sub SmarterCoffee_ExtraStrengthHandleMultipleGrindCycles($) {
+    my ($hash) = @_;
+
+    my $current = int($hash->{".extra_strength.current_grind_cycle"} // 0);
+    my $cycles = int($hash->{".extra_strength.grind_cycles"} // 0);
+
+    if ($cycles > 1
+        and $current < $cycles
+        and $current > int($hash->{".extra_strength.previous_grind_cycle"} // 0)
+        and int($hash->{".extra_strength.desired_cups"}) > 0
+        and int($hash->{".extra_strength.phase"}) == 1) {
+
+        $hash->{".extra_strength.previous_grind_cycle"} = $current;
+
+        # Resetting brew state to ensure it doesn't interfere with stop command that runs with "no-reset" option.
+        SmarterCoffee_ResetBrewState($hash, "transitioning");
+
+        # Stopping current brew (without resetting the extra brew states)
+        SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "stop", "no-reset" ]});
+
+        # Restarting brew with same input
+        my @params = SmarterCoffee_ExtraStrengthCreateBrewParams($hash, 1);
+        unshift(@params, "brew");
+        unshift(@params, $hash->{NAME});
+
+        Log3 $hash->{NAME}, 4, "Extra-Strength :: Repeating phase 1 (Grind cycle: " . ($current + 1) . " of $cycles) [set " . join(" ", @params) . "]";
+
+        SmarterCoffee_Set($hash, @params);
+        return 1;
+    }
+
+    return 0;
 }
 
 sub SmarterCoffee_ExtraStrengthHandleBrewing($) {
@@ -1057,8 +1103,8 @@ sub SmarterCoffee_ExtraStrengthHandleBrewing($) {
         # Resetting brew state to ensure it doesn't interfere with stop command that runs with "no-reset" option.
         SmarterCoffee_ResetBrewState($hash, "transitioning");
 
-        # Stopping brewing after initial grinding (skip stop if we are in phase-2 and came here due to pre-brew delay)
-        SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "stop", "no-reset" ]}) if not $hash->{".extra_strength.phase-2"};
+        # Stopping brewing after initial grinding (skip stop if we are in phase 2 and came here due to pre-brew delay)
+        SmarterCoffee_Set($hash, @{[ $hash->{NAME}, "stop", "no-reset" ]}) if ($hash->{".extra_strength.phase"} // 0) < 2;
 
         unshift(@params, "brew");
         unshift(@params, $hash->{NAME});
@@ -1162,7 +1208,7 @@ sub SmarterCoffee_TranslateParamsForExtraStrength($$$) {
         my $maxCups = ReadingsVal($hash->{NAME}, "cups_max", $desiredCups);
         $desiredCups = $maxCups if ($desiredCups > $maxCups);
 
-        my %grind = ( "cups" => undef, "desired" => $desiredCups, "strength" => undef, "delta" => undef, "error" => undef );
+        my %grind = ( "cups" => undef, "cycles" => undef, "desired" => $desiredCups, "strength" => undef, "delta" => undef, "error" => undef );
 
         while ($desiredCups > 0 and not defined($grind{cups})) {
             my $targetWeight = $desiredCups * $weights[2] * $extraPercent;
@@ -1170,16 +1216,22 @@ sub SmarterCoffee_TranslateParamsForExtraStrength($$$) {
             for (my $i = 0; $i < int(@weights); $i++) {
                 if (($weights[$i] // -1) > 0 and $targetWeight > 0) {
                     my $cups = int($targetWeight / $weights[$i]) + ($extraPercent > 1 ? 1 : 0);
+                    my $cycles = int($cups / $maxCups) + ($cups % $maxCups ? 1 : 0);
                     my $weight = $cups * $weights[$i];
                     my $delta = ($targetWeight > $weight ? ($targetWeight - $weight) : ($weight - $targetWeight));
                     my $error = int((1 - (($targetWeight - $delta) / $targetWeight)) * 100);
 
                     Log3 $hash->{NAME}, 4,
-                        "Extra-Strength :: GC: $cups (".$strengths[$i]."), DC: $desiredCups, D: $delta (e:$error%), W: $weight, T: $targetWeight";
+                        "Extra-Strength :: GC: $cups (" . $strengths[$i] . "), DC: $desiredCups, D: $delta (e:$error%), W: $weight, T: $targetWeight, C: $cycles";
 
-                    if ($cups <= $maxCups and (not defined($grind{delta}) or $grind{delta} > $delta)) {
+                    if ($cycles <= 3
+                        and int($cups / $cycles) > 0
+                        and (int($cups / $cycles) + $cups % $cycles) <= $maxCups
+                        and (not defined($grind{delta}) or $grind{delta} > $delta)) {
+
                         $grind{desired} = $desiredCups;
                         $grind{cups} = $cups;
+                        $grind{cycles} = $cycles;
                         $grind{delta} = $delta;
                         $grind{strength} = $strengths[$i];
                         $grind{error} = $error;
@@ -1191,16 +1243,31 @@ sub SmarterCoffee_TranslateParamsForExtraStrength($$$) {
         }
 
         if (defined($grind{cups})) {
+            $hash->{".extra_strength.phase"} = 1;
+            $hash->{".extra_strength.error_rate"} = $grind{error};
+
             $hash->{".extra_strength.original_strength"} = ReadingsVal($hash->{NAME}, "strength", "-");
             $hash->{".extra_strength.original_desired_cups"} = $grind{desired};
             $hash->{".extra_strength.desired_cups"} = $grind{desired};
-            $hash->{".extra_strength.error_rate"} = $grind{error};
-            $params->[0] = $grind{cups};
+
+            $hash->{".extra_strength.grind_cycles"} = $grind{cycles};
+            $hash->{".extra_strength.current_grind_cycle"} = 0 if (not $hash->{".extra_strength.current_grind_cycle"});
+            $hash->{".extra_strength.current_grind_cycle"}++;
+
+            my $grindCups = $grind{cups};
+            if ($grind{cycles} > 1) {
+                my $cycle = int($hash->{".extra_strength.current_grind_cycle"});
+                $grindCups = int($grind{cups} / $grind{cycles});
+                $grindCups += $grind{cups} % $grind{cycles} if ($cycle == $grind{cycles});
+            }
+
+            $params->[0] = $grindCups;
             $params->[1] = $grind{strength};
 
             return 1;
         } else {
             Log3 $hash->{NAME}, 2, "Extra-Strength :: Failed calculating extra strength (not enough water?). Ordinary coffee strength will be applied.";
+            SmarterCoffee_ResetExtraStrengthMode($hash);
         }
 
     } elsif ($phase eq "brew"
