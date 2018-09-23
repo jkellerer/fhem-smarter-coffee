@@ -523,7 +523,6 @@ sub SmarterCoffee_Initialize($) {
         ."set-on-brews-coffee "
         ."strength-coffee-weights "
         ."strength-extra-percent "
-        ."strength-extra-pre-brew-cups "
         ."strength-extra-pre-brew-delay-seconds "
         ."strength-extra-start-on-device-strength:off,weak,medium,strong "
         .$readingFnAttributes;
@@ -1029,6 +1028,7 @@ sub SmarterCoffee_ProcessEventForExtraStrength($$) {
         } elsif ($event =~ /^state:\s*done/) {
             # Finishing first round (grinding & first brew are done here)
             if ((my $delay = int($hash->{".extra_strength.pre_brew_phase_delay"} // 0)) > 0) {
+                delete $hash->{".extra_strength.pre_brew_phase_delay"};
                 InternalTimer(gettimeofday() + $delay, "SmarterCoffee_ExtraStrengthHandleBrewing", $hash, 0);
 
             } else {
@@ -1203,15 +1203,20 @@ sub SmarterCoffee_TranslateParamsForExtraStrength($$$) {
             Log3 $hash->{NAME}, 2, "Extra-Strength :: Failed calculating extra strength (not enough water?). Ordinary coffee strength will be applied.";
         }
 
-    } elsif ($phase eq "brew" and defined($hash->{".extra_strength.desired_cups"})) {
+    } elsif ($phase eq "brew"
+             and (my $cups = ($hash->{".extra_strength.desired_cups"} // 0)) > 0
+             and (my $originalCups = ($hash->{".extra_strength.original_desired_cups"} // 0)) > 0) {
+
+        # preBrewCups = ceil(originalCups / 2) :: ensures that following cups can be brewed with remaining water.
         my ($preBrewCups, $preBrewDelay) = (
-            int(AttrVal($hash->{NAME}, "strength-extra-pre-brew-cups", 1)),
+            ($originalCups - int($originalCups / 2)),
             int(AttrVal($hash->{NAME}, "strength-extra-pre-brew-delay-seconds", 0))
         );
 
-        if ($preBrewCups > 0 and $preBrewDelay > 0
-            and $preBrewCups < $hash->{".extra_strength.desired_cups"}
-            and not $hash->{".extra_strength.pre_brew_phase_delay"}) {
+        if ($preBrewDelay > 0
+            and $preBrewCups > 0
+            and $cups > $preBrewCups
+            and $cups == $originalCups) {
 
             $hash->{".extra_strength.pre_brew_phase_delay"} = $preBrewDelay;
             $hash->{".extra_strength.desired_cups"} -= $preBrewCups;
@@ -1690,14 +1695,10 @@ sub SmarterCoffee_GetDevStateIcon {
     <li>
         <code>attr &lt;name&gt; strength-extra-pre-brew-delay-seconds 0</code><br>
         Specifies a delay in seconds when brewing coffee with extra strength which is used to split the brewing operation in a pre-brew
-        and the normal brew phase. The pre-brew phase brews a small amount of cups (usually 1) and pauses for a couple of seconds
-        before continuing with the rest of the cups.
-        This mode can help to overcome limitations with grounds being too coarse to provide good taste at standard brewing speed.
-        Specifying 0 disables "pre-brew".
-        </li><br>
-    <li>
-        <code>attr &lt;name&gt; strength-extra-pre-brew-cups 1</code><br>
-        Specifies the number of cups that are brewed first before delaying brewing in extra mode. Specifying 0 disables "pre-brew".
+        and the normal brew phase. The pre-brew phase brews half of the cups and pauses for the specified amount of seconds before
+        continuing with the rest of the cups.
+        This mode can help to overcome limitations with coffee grounds being too coarse to provide good taste at standard brewing speed.
+        Specify 0 or do not set the attribute to disable "pre-brew" (default).
         </li><br>
     <li>
         <code>attr &lt;name&gt; strength-extra-start-on-device-strength [off, weak, medium, strong]</code><br>
